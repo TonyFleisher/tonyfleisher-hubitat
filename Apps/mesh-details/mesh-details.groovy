@@ -31,16 +31,30 @@ mappings {
 
 def mainPage() {
 	dynamicPage (name: "mainPage", title: "", install: true, uninstall: true) {
-
-		section("Link Style:") {
-			paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
-			input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
-		}
 		section("") {
-			if(settings?.linkStyle) {
-				href "", title: "Mesh Details", url: getAppEndpointUrl("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+			label title: "App name"
+		}
+		if (!getAccessToken()) {
+            section("") {
+			    paragraph title: "Enable OAuth", "Please enable OAuth for this App (in Apps Code)"
+            }
+        } else {
+			if (app.getInstallationState() == 'COMPLETE') {
+				section("") {
+					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
+					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
+				}
+				section("") {
+					if(settings?.linkStyle) {
+						href "", title: "Mesh Details", url: getAppEndpointUrl("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+					} else {
+						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
+					}
+				}
 			} else {
-				paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
+				section("") {
+					paragraph title: "Click Done", "Please click Done to install app before continuing"
+				}
 			}
 		}
 	}
