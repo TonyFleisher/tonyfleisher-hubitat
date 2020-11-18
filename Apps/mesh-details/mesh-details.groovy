@@ -3,17 +3,16 @@
  *   Copyright 2020 Tony Fleisher
  *
  // /**********************************************************************************************************************************************/
-import java.security.MessageDigest
 
 definition(
 	name			: "Hubitat-Mesh-Details",
 	namespace		: "tfleisher",
 	author			: "TonyFleisher",
-	description		: "Get Zigbee and ZWave mesh Details",
+	description		: "Get Mesh Details",
 	category		: "Utility",
 	singleInstance	: true,
-	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
-	iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png",
+	iconUrl: "",
+	iconX2Url: "",
 	oauth: true)
 
 
