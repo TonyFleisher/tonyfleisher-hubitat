@@ -8,7 +8,7 @@ definition(
 	name			: "Hubitat-Mesh-Details",
 	namespace		: "tfleisher",
 	author			: "TonyFleisher",
-	description		: "Get Mesh Details",
+	description		: "Get Device Mesh and Router Details",
 	category		: "Utility",
 	singleInstance	: true,
 	iconUrl: "",
