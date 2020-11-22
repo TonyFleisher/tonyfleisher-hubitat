@@ -17,7 +17,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.2" }
+private releaseVer() { return "0.1.3" }
 private appVerDate() { return "2020-11-17" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -46,7 +46,7 @@ def mainPage() {
 				}
 				section("") {
 					if(settings?.linkStyle) {
-						href "", title: "Mesh Details", url: getAppEndpointUrl("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+							href "", title: "Mesh Details", url: getAppEndpointUrl("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
 					} else {
 						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
 					}
@@ -113,6 +113,8 @@ function getZwaveList() {
 	return instance
 	.get('/hub/zwaveInfo')
 	.then(response => {
+		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
+
 		var result = {}
 		var doc = new jQuery(response.data)
 		var deviceRows = doc.find('.device-row')
@@ -143,10 +145,15 @@ function transformZwaveRow(row) {
 	var connectionSpeed = lastParts[0].split(' ')[1]
 
 	var nodeText = childrenData[0].innerText.trim()
-	console.log ("processing: " + nodeText)
+
 	var devId = (nodeText.match(/0x([^ ]+) /))[1]
+	var devIdDec = (nodeText.match(/\\(([0-9]+)\\)/))[1]
+	var devId2 = parseInt("0x"+devId)
+	var devStatus = row
 	var deviceData = {
 		id: devId,
+		id2: devId2,
+		devIdDec: devIdDec,
 		node: nodeText,
 		metrics: statMap,
 		routers: routers,
@@ -154,6 +161,7 @@ function transformZwaveRow(row) {
 		deviceLink: childrenData[4].innerHTML.trim(),
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routesText,
+		deviceStatus: childrenData[2].innerText.trim(),
 		connection: connectionSpeed
 
 	}
@@ -195,44 +203,106 @@ var tableHandle;
 						columns: [
 							//{ data: 'networkType', title: 'Type', searchPanes: { preSelect:['ZWAVE','ZIGBEE']} },
 							{ data: 'node', title: 'Node' },
+							{ data: 'deviceStatus', title: 'Status',
+								render: function(data, type, row) {
+									if (type === 'filter' || type === 'sp' || type === 'display') {
+										return data
+									}
+									if (type === 'sort' || type === 'type') {
+										if (data == 'OK') 
+											return 0
+										else if (data == 'NOT_RESPONDING')
+											return 1
+										else if (data == 'FAILED')
+											return 2
+										else 
+											return `3\${data}`
+									}
+								},
+								"createdCell": function (td, cellData, rowData, row, col) {
+									if ( cellData != "OK" ) {
+										\$(td).css('color', 'red')
+									}
+								}
+							},
 							{ data: 'label', title: 'Device name'},
-							{ data: 'routersFull', title: 'Routers', visible: false,
+							{ data: 'routersFull', title: 'Repeater', visible: false,
 								render: {'_':'[, ]', sp: '[]'},
 								defaultContent: "None",
 								searchPanes : { orthogonal: 'sp' },
 							},
-							{ data: 'connection', title: 'Connection Speed', defaultContent: "Unknown"},
+							{ data: 'connection', title: 'Connection Speed', defaultContent: "Unknown",
+								searchPanes: { header: 'Speed'}},
 							{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp'},
 							 render: function(data, type, row) {
 								 var val = data.match(/(\\d*)ms/)[1]
 								 if (type === 'filter' || type === 'sp') {
-								 	return val == (undefined || '') ? 'unknown' : val < 10 ? '0-10ms' : val <= 50 ? '10-50ms' : '> 50ms'
+								 	return val == (undefined || '') ? 'unknown' : val < 100 ? '0-100ms' : val <= 500 ? '100-500ms' : '> 500ms'
 								 } else if (type === 'sort' || type === 'type') {
 									 return val
 								 } else {
 									 return val ? val + " ms" : 'unknown'
 								 }
-							  }
 							 },
+							 createdCell: function (td, cellData, rowData, row, col) {
+								 	var val = cellData.match(/(\\d*)ms/)[1]
+									if ( val > 500 ) {
+										\$(td).css('color', 'red')
+									} else if (val > 100) {
+										\$(td).css('color', 'orange')
+									}
+
+							 }
+							  
+							},
 
 							{ data: 'metrics.LWR RSSI', title: 'LWR RSSI', defaultContent: "unknown", searchPanes: {show: false},
-render: function(data, type, row) {
+							  render: function(data, type, row) {
 								 var val = (data === '' ? '' : data.match(/([-0-9]*)dB/)[1])
-								 console.log('val for ' + data + ' is ' + val)
+								 //console.log('val for ' + data + ' is ' + val)
 								 if (type === 'sort' || type === 'type') {
 									 return val
 								 } else {
 									 return val ? val + " dB" : 'unknown'
 								 }
+							  },
+							 createdCell: function (td, cellData, rowData, row, col) {
+								 	var val = (cellData === '' ? '' : cellData.match(/([-0-9]*)dB/)[1])
+									if ( val > 0 && val < 17) {
+										\$(td).css('color', 'orange')
+									} else if (val <= 0) {
+										\$(td).css('color', 'red')
+									}
+
+							 }
+
+							},
+							{ data: 'metrics.Neighbors', title: 'Neighbor Count', defaultContent: "n/a", 
+							  searchPanes: {show: false},
+							  createdCell: function (td, cellData, rowData, row, col) {
+								  if (cellData == 2) {
+									  \$(td).css('color', 'orange')
+								  } else if (cellData <= 1) {
+									  \$(td).css('color', 'red')
+								  }
 							  }
 							},
-							{ data: 'metrics.Neighbors', title: 'Neighbor Count', defaultContent: "n/a", searchPanes: {show: false} },
-							{ data: 'routeHtml', title: 'Route' },
-							{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
-								"render": function ( data, type, row ) {
-                    				return JSON.stringify(data);
-								}
-							}
+							{ data: 'metrics.Route Changes', title: 'Route Chnges', defaultContent: "n/a", 
+							  searchPanes: {show: false},
+							  createdCell: function (td, cellData, rowData, row, col) {
+								  if (cellData > 1 && cellData <= 4) {
+									  \$(td).css('color', 'orange')
+								  } else if (cellData > 4) {
+									  \$(td).css('color', 'red')
+								  }
+							  }
+							},
+							{ data: 'routeHtml', title: 'Route' }
+							// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
+							// 	"render": function ( data, type, row ) {
+                    		// 		return JSON.stringify(data);
+							// 	}
+							// }
 						],
 						"pageLength": -1,
 						"rowId": 'id',
@@ -240,7 +310,9 @@ render: function(data, type, row) {
 						"paging": false,
 						"dom": "Pftrip",
 						"searchPanes": {
-							cascadePanes: true
+							layout: 'columns-4',
+							cascadePanes: true,
+							order: ['Repeater', 'Status', 'RTT Avg', 'Connection Speed']
 						}
 					});
 					updateLoading('','');
