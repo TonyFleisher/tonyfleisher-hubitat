@@ -5,12 +5,12 @@
  // /**********************************************************************************************************************************************/
 
 definition(
-	name			: "Hubitat-Mesh-Details",
-	namespace		: "tfleisher",
-	author			: "TonyFleisher",
-	description		: "Get Device Mesh and Router Details",
-	category		: "Utility",
-	singleInstance	: true,
+	name: "Hubitat-Mesh-Details",
+	namespace: "tfleisher",
+	author: "TonyFleisher",
+	description: "Get Device Mesh and Router Details",
+	category: "Utility",
+	singleInstance: true,
 	iconUrl: "",
 	iconX2Url: "",
 	oauth: true)
