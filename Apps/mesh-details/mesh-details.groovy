@@ -19,7 +19,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.5-beta" }
+private releaseVer() { return "0.1.6-beta" }
 private appVerDate() { return "2020-11-27" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -76,19 +76,22 @@ def meshInfo() {
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <script src="${getAppEndpointUrl("script.js")}"></script>
 <style>
-td.details-control {
+td.details-control div{
     background: url('/ui2/images/sort_desc.png') no-repeat center center;
     cursor: pointer;
 	transform: rotate(-90deg);
+	position: relative;
+	left: -4px;
 }
-tr.shown td.details-control {
+tr.shown td.details-control div{
     background: url('/ui2/images/sort_desc.png') no-repeat center center;
 	transform: none;
+	left: auto;
 }
 </style>
 </head>
 <body>
-<h1 style="text-align:center;">Hubitat Z-Wave Mesh Details</h1>
+<h1 style="text-align:center;">Hubitat Z-Wave Mesh Details <div role="doc-subtitle" style="font-size: small;">(v${releaseVer() + ' - ' + appVerDate()})</div> </h1>
 <div id="messages"><div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
 <table id="mainTable" class="stripe cell-border hover">
 	<thead>
@@ -276,7 +279,7 @@ var tableHandle;
 							"className":      'details-control',
 							"orderable":      false,
 							"data":           null,
-							"defaultContent": ''
+							"defaultContent": '<div>&nbsp;</div>'
 						},
 						{ data: 'node', title: 'Node' },
 						{ data: 'deviceStatus', title: 'Status',
@@ -317,7 +320,9 @@ var tableHandle;
 								} else if (type === 'sort' || type === 'type') {
 									return val
 								} else {
-									return val ? val + " ms" : 'unknown'
+									return val ? 
+										`\${val} ms`
+										: 'unknown'
 								}
 							},
 							createdCell: function (td, cellData, rowData, row, col) {
@@ -327,6 +332,7 @@ var tableHandle;
 								} else if (val > 100) {
 									\$(td).css('color', 'orange')
 								}
+								\$(td).append(`<div style="font-size: small;">count: \${rowData.detail.transmissionCount}</div>`)
 
 							}
 							
