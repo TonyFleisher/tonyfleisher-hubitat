@@ -332,8 +332,9 @@ var tableHandle;
 								} else if (val > 100) {
 									\$(td).css('color', 'orange')
 								}
-								\$(td).append(`<div style="font-size: small;">count: \${rowData.detail.transmissionCount}</div>`)
-
+								if (val > 0) {
+									\$(td).append(`<div style="font-size: small;">count: \${rowData.detail.transmissionCount}</div>`)
+								}
 							}
 							
 						},
