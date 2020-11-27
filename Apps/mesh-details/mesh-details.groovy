@@ -5,7 +5,7 @@
  // /**********************************************************************************************************************************************/
 
 definition(
-	name: "Hubitat-Mesh-Details",
+	name: "Hubitat Z-Wave Mesh Details",
 	namespace: "tfleisher",
 	author: "TonyFleisher",
 	description: "Get Device Mesh and Router Details",
@@ -13,12 +13,14 @@ definition(
 	singleInstance: true,
 	iconUrl: "",
 	iconX2Url: "",
-	oauth: true)
+	oauth: true,
+	importUrl: "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
+)
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.3" }
-private appVerDate() { return "2020-11-17" }
+private releaseVer() { return "0.1.5-beta" }
+private appVerDate() { return "2020-11-27" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -73,6 +75,17 @@ def meshInfo() {
 -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <script src="${getAppEndpointUrl("script.js")}"></script>
+<style>
+td.details-control {
+    background: url('/ui2/images/sort_desc.png') no-repeat center center;
+    cursor: pointer;
+	transform: rotate(-90deg);
+}
+tr.shown td.details-control {
+    background: url('/ui2/images/sort_desc.png') no-repeat center center;
+	transform: none;
+}
+</style>
 </head>
 <body>
 <h1 style="text-align:center;">Hubitat Z-Wave Mesh Details</h1>
@@ -114,15 +127,30 @@ function getZwaveList() {
 	.get('/hub/zwaveInfo')
 	.then(response => {
 		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
-
-		var result = {}
 		var doc = new jQuery(response.data)
 		var deviceRows = doc.find('.device-row')
-		return deviceRows.map (
+		var results = []
+		deviceRows.each (
 			(index,row) => {
-				return transformZwaveRow(row)
+				results.push(transformZwaveRow(row))
 			}
 		)
+		return results
+	})
+	.catch(error => { console.error(error); updateLoading("Error", error);} );
+}
+
+function getZwaveNodeDetail() {
+	const instance = axios.create({
+		timeout: 5000
+	});
+
+	return instance
+	.get('/hub/zwaveNodeDetail')
+	.then(response => {
+		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
+
+		return response
 	})
 	.catch(error => { console.error(error); updateLoading("Error", error);} );
 }
@@ -149,7 +177,6 @@ function transformZwaveRow(row) {
 	var devId = (nodeText.match(/0x([^ ]+) /))[1]
 	var devIdDec = (nodeText.match(/\\(([0-9]+)\\)/))[1]
 	var devId2 = parseInt("0x"+devId)
-	var devStatus = row
 	var deviceData = {
 		id: devId,
 		id2: devId2,
@@ -165,13 +192,66 @@ function transformZwaveRow(row) {
 		connection: connectionSpeed
 
 	}
-	console.log(`deviceData: \${JSON.stringify(deviceData)}`)
 	return deviceData
 }
 
 function updateLoading(msg1, msg2) {
 	\$('#loading1').text(msg1);
 	\$('#loading2').text(msg2);
+}
+
+async function getData() {
+
+	var devList = await getZwaveList()
+	var fullNameMap = devList.reduce( (acc,val) => {
+						 acc[val.id]= `\${val.id} - \${val.label}`;
+						 return acc;
+					 }, {});
+
+
+	
+	updateLoading('Loading.','Getting device detail');
+	var nodeDetails = await getZwaveNodeDetail()
+
+	var tableContent = devList.map( dev => {
+		var routersFull = dev.routers.map(router => fullNameMap[router])
+		var detail = nodeDetails.data[dev.id2.toString()]
+		return {...dev, 'routersFull': routersFull, 'detail': detail}
+	})
+
+	return tableContent
+}
+
+function findDeviceByDecId(devId) {
+	return tableContent.find( row => row.id2 == devId)
+}
+
+function findDeviceByHexid(devId) {
+	return tableContent.find( row => row.id == devId)
+}
+function displayNeighbors(devId) {
+	var neighborList = []
+	var deviceData = tableContent.find( row => row.id == devId)
+	var html = '<div>'
+	html += 'Neighbors:<hr/>'
+	Object.entries(deviceData.detail.neighbors).forEach( (e) => {
+		var key = e[0]
+		var val = e[1]
+		var nHex = parseInt(key).toString(16)
+		if (key < 6) { 
+			console.log (`Found neighbor: \${key} name: HUB `)
+			html += `0x0\${key} - HUB`
+		} else {
+			var neighbor = findDeviceByDecId(key)
+			console.log (`Found neighbor: \${key} spead: \${val.speed} repeater?: \${val.repeater} name: \${neighbor.label}` )
+			html += `0x\${neighbor.id} - \${neighbor.label}`
+		}
+		html += '<br/>'
+	})
+
+	html += '</div>'
+	return html
+
 }
 
 \$.ajaxSetup({
@@ -182,147 +262,160 @@ var tableHandle;
 \$(document).ready(function(){
 		loadScripts().then(function() {
 			updateLoading('Loading..','Getting device data');
-			getZwaveList().then(list => {
-				Promise.all(list).then( r => {	
-					// console.log(list)
-					updateLoading('Loading.','Getting device detail');
-					
-					var fullNameMap = r.reduce( (acc,val) => {
-						 acc[val.id]= `\${val.id} - \${val.label}`;
-						 return acc;
-					 }, {});
+			getData().then( r => {	
+				// console.log(list)
+				tableContent = r;
 
-					tableContent = r.map( dev => {
-						var routersFull = dev.routers.map(router => fullNameMap[router])
-						return {...dev, 'routersFull': routersFull}
-					})
-					updateLoading('Loading..','Creating table');
-					tableHandle = \$('#mainTable').DataTable({
-						data: tableContent,
-						order: [[0,'asc']],
-						columns: [
-							//{ data: 'networkType', title: 'Type', searchPanes: { preSelect:['ZWAVE','ZIGBEE']} },
-							{ data: 'node', title: 'Node' },
-							{ data: 'deviceStatus', title: 'Status',
-								render: function(data, type, row) {
-									if (type === 'filter' || type === 'sp' || type === 'display') {
-										return data
-									}
-									if (type === 'sort' || type === 'type') {
-										if (data == 'OK') 
-											return 0
-										else if (data == 'NOT_RESPONDING')
-											return 1
-										else if (data == 'FAILED')
-											return 2
-										else 
-											return `3\${data}`
-									}
-								},
-								"createdCell": function (td, cellData, rowData, row, col) {
-									if ( cellData != "OK" ) {
-										\$(td).css('color', 'red')
-									}
+				updateLoading('Loading..','Creating table');
+				tableHandle = \$('#mainTable').DataTable({
+					data: tableContent,
+					order: [[1,'asc']],
+					columns: [
+						//{ data: 'networkType', title: 'Type', searchPanes: { preSelect:['ZWAVE','ZIGBEE']} },
+						{
+							"className":      'details-control',
+							"orderable":      false,
+							"data":           null,
+							"defaultContent": ''
+						},
+						{ data: 'node', title: 'Node' },
+						{ data: 'deviceStatus', title: 'Status',
+							render: function(data, type, row) {
+								if (type === 'filter' || type === 'sp' || type === 'display') {
+									return data
+								}
+								if (type === 'sort' || type === 'type') {
+									if (data == 'OK') 
+										return 0
+									else if (data == 'NOT_RESPONDING')
+										return 1
+									else if (data == 'FAILED')
+										return 2
+									else 
+										return `3\${data}`
 								}
 							},
-							{ data: 'label', title: 'Device name'},
-							{ data: 'routersFull', title: 'Repeater', visible: false,
-								render: {'_':'[, ]', sp: '[]'},
-								defaultContent: "None",
-								searchPanes : { orthogonal: 'sp' },
+							"createdCell": function (td, cellData, rowData, row, col) {
+								if ( cellData != "OK" ) {
+									\$(td).css('color', 'red')
+								}
+							}
+						},
+						{ data: 'label', title: 'Device name'},
+						{ data: 'routersFull', title: 'Repeater', visible: false,
+							render: {'_':'[, ]', sp: '[]'},
+							defaultContent: "None",
+							searchPanes : { orthogonal: 'sp' },
+						},
+						{ data: 'connection', title: 'Connection Speed', defaultContent: "Unknown",
+							searchPanes: { header: 'Speed'}},
+						{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp'},
+							render: function(data, type, row) {
+								var val = data.match(/(\\d*)ms/)[1]
+								if (type === 'filter' || type === 'sp') {
+								return val == (undefined || '') ? 'unknown' : val < 100 ? '0-100ms' : val <= 500 ? '100-500ms' : '> 500ms'
+								} else if (type === 'sort' || type === 'type') {
+									return val
+								} else {
+									return val ? val + " ms" : 'unknown'
+								}
 							},
-							{ data: 'connection', title: 'Connection Speed', defaultContent: "Unknown",
-								searchPanes: { header: 'Speed'}},
-							{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp'},
-							 render: function(data, type, row) {
-								 var val = data.match(/(\\d*)ms/)[1]
-								 if (type === 'filter' || type === 'sp') {
-								 	return val == (undefined || '') ? 'unknown' : val < 100 ? '0-100ms' : val <= 500 ? '100-500ms' : '> 500ms'
-								 } else if (type === 'sort' || type === 'type') {
-									 return val
-								 } else {
-									 return val ? val + " ms" : 'unknown'
-								 }
-							 },
-							 createdCell: function (td, cellData, rowData, row, col) {
-								 	var val = cellData.match(/(\\d*)ms/)[1]
-									if ( val > 500 ) {
-										\$(td).css('color', 'red')
-									} else if (val > 100) {
-										\$(td).css('color', 'orange')
-									}
+							createdCell: function (td, cellData, rowData, row, col) {
+								var val = cellData.match(/(\\d*)ms/)[1]
+								if ( val > 500 ) {
+									\$(td).css('color', 'red')
+								} else if (val > 100) {
+									\$(td).css('color', 'orange')
+								}
 
-							 }
-							  
-							},
+							}
+							
+						},
 
-							{ data: 'metrics.LWR RSSI', title: 'LWR RSSI', defaultContent: "unknown", searchPanes: {show: false},
-							  render: function(data, type, row) {
-								 var val = (data === '' ? '' : data.match(/([-0-9]*)dB/)[1])
-								 //console.log('val for ' + data + ' is ' + val)
-								 if (type === 'sort' || type === 'type') {
-									 return val
-								 } else {
-									 return val ? val + " dB" : 'unknown'
-								 }
-							  },
-							 createdCell: function (td, cellData, rowData, row, col) {
-								 	var val = (cellData === '' ? '' : cellData.match(/([-0-9]*)dB/)[1])
-									if ( val > 0 && val < 17) {
-										\$(td).css('color', 'orange')
-									} else if (val <= 0) {
-										\$(td).css('color', 'red')
-									}
+						{ data: 'metrics.LWR RSSI', title: 'LWR RSSI', defaultContent: "unknown", searchPanes: {show: false},
+							render: function(data, type, row) {
+								var val = (data === '' ? '' : data.match(/([-0-9]*)dB/)[1])
+								if (type === 'sort' || type === 'type') {
+									return val
+								} else {
+									return val ? val + " dB" : 'unknown'
+								}
+							},
+							createdCell: function (td, cellData, rowData, row, col) {
+								var val = (cellData === '' ? '' : cellData.match(/([-0-9]*)dB/)[1])
+								if ( val > 0 && val < 17) {
+									\$(td).css('color', 'orange')
+								} else if (val <= 0) {
+									\$(td).css('color', 'red')
+								}
 
-							 }
+							}
 
-							},
-							{ data: 'metrics.Neighbors', title: 'Neighbor Count', defaultContent: "n/a", 
-							  searchPanes: {show: false},
-							  createdCell: function (td, cellData, rowData, row, col) {
-								  if (cellData == 2) {
-									  \$(td).css('color', 'orange')
-								  } else if (cellData <= 1) {
-									  \$(td).css('color', 'red')
-								  }
-							  }
-							},
-							{ data: 'metrics.Route Changes', title: 'Route Chnges', defaultContent: "n/a", 
-							  searchPanes: {show: false},
-							  createdCell: function (td, cellData, rowData, row, col) {
-								  if (cellData > 1 && cellData <= 4) {
-									  \$(td).css('color', 'orange')
-								  } else if (cellData > 4) {
-									  \$(td).css('color', 'red')
-								  }
-							  }
-							},
-							{ data: 'routeHtml', title: 'Route' }
-							// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
-							// 	"render": function ( data, type, row ) {
-                    		// 		return JSON.stringify(data);
-							// 	}
-							// }
-						],
-						"pageLength": -1,
-						"rowId": 'id',
-						"lengthChange": false,
-						"paging": false,
-						"dom": "Pftrip",
-						"searchPanes": {
-							layout: 'columns-4',
-							cascadePanes: true,
-							order: ['Repeater', 'Status', 'RTT Avg', 'Connection Speed']
+						},
+						{ data: 'metrics.Neighbors', title: 'Neighbor Count', defaultContent: "n/a", 
+							searchPanes: {show: false},
+							createdCell: function (td, cellData, rowData, row, col) {
+								if (cellData == 2) {
+									\$(td).css('color', 'orange')
+								} else if (cellData <= 1) {
+									\$(td).css('color', 'red')
+								}
+								\$(td).addClass('neighbors-' + rowData.id2)
+								//\$(td).append(`&nbsp;<button style="float: right;" onclick="displayNeighbors('\${rowData.id}')">View</button>`)
+							}
+						},
+						{ data: 'metrics.Route Changes', title: 'Route Chnges', defaultContent: "n/a", 
+							searchPanes: {show: false},
+							createdCell: function (td, cellData, rowData, row, col) {
+								if (cellData > 1 && cellData <= 4) {
+									\$(td).css('color', 'orange')
+								} else if (cellData > 4) {
+									\$(td).css('color', 'red')
+								}
+							}
+						},
+						{ data: 'routeHtml', title: 'Route' }
+						// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
+						// 	"render": function ( data, type, row ) {
+						// 		return JSON.stringify(data);
+						// 	}
+						// }
+					],
+					"pageLength": -1,
+					"rowId": 'id',
+					"lengthChange": false,
+					"paging": false,
+					"dom": "Pftrip",
+					"searchPanes": {
+						layout: 'columns-4',
+						cascadePanes: true,
+						order: ['Repeater', 'Status', 'RTT Avg', 'Connection Speed']
+					}
+				});
+				updateLoading('','');
+			}).then(e => { 
+
+				\$('#mainTable tbody').on('click', 'td.details-control', function () {
+						var tr = \$(this).closest('tr');
+						var row = tableHandle.row( tr );
+				
+						if ( row.child.isShown() ) {
+							row.child.hide();
+							tr.removeClass('shown');
 						}
-					});
-					updateLoading('','');
-				})
+						else {
+							row.child(displayNeighbors(row.id())).show();
+							tr.addClass('shown');
+						}
+				} );
 
-			});
+			})
+
+			
 		});
 });
 """
-	render contentType: "application/javascript", data: javaScript
+	render contentType: "application/javascript", data: javaScript.replaceAll('\t','  ')
 	
 }
 
