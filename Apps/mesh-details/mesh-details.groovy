@@ -1,9 +1,21 @@
 /*
  *   Adapted from: ST Mesh Details SmartApp
- *   Copyright 2020 Tony Fleisher
- *
- // /**********************************************************************************************************************************************/
+ *   Copyright 2020 Tony Fleisher. Some Rights Reserved.
+*/
 
+/*
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
 definition(
 	name: "Hubitat Z-Wave Mesh Details",
 	namespace: "tfleisher",
@@ -19,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.6-beta" }
+private releaseVer() { return "0.1.8-beta" }
 private appVerDate() { return "2020-11-27" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -99,6 +111,7 @@ tr.shown td.details-control div{
 	</tr>
 	</thead>
 </table>
+<div>&copy; 2020 Tony Fleisher. All Rights Reserved.</div>
 </body>
 </html>
 	"""
@@ -176,7 +189,6 @@ function transformZwaveRow(row) {
 	var connectionSpeed = lastParts[0].split(' ')[1]
 
 	var nodeText = childrenData[0].innerText.trim()
-
 	var devId = (nodeText.match(/0x([^ ]+) /))[1]
 	var devIdDec = (nodeText.match(/\\(([0-9]+)\\)/))[1]
 	var devId2 = parseInt("0x"+devId)
@@ -184,7 +196,7 @@ function transformZwaveRow(row) {
 		id: devId,
 		id2: devId2,
 		devIdDec: devIdDec,
-		node: nodeText,
+		node: nodeText.replace(' ', '&nbsp;'),
 		metrics: statMap,
 		routers: routers,
 		label: childrenData[4].innerText.trim(),
