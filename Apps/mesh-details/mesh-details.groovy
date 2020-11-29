@@ -31,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.9-beta" }
+private releaseVer() { return "0.1.10-beta" }
 private appVerDate() { return "2020-11-28" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -65,9 +65,9 @@ def mainPage() {
 						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
 					}
 				}
-				section("Advanced", hideable: true, hidden: true) {
-					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
-				}
+				// section("Advanced", hideable: true, hidden: true) {
+				// 	input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
+				// }
 			} else {
 				section("") {
 					paragraph title: "Click Done", "Please click Done to install app before continuing"
