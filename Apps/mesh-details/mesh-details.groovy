@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.10-beta" }
-private appVerDate() { return "2020-11-28" }
+private releaseVer() { return "0.1.11-beta" }
+private appVerDate() { return "2020-11-29" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -186,23 +186,30 @@ function transformZwaveRow(row) {
 	})
 
 	// "01 -> 08 -> 0C -> 1B 100kbps"
-	var routesText = childrenData[6].innerText.trim()
-	var routers = routesText.split(' -> ')
-	var lastParts = routers.splice(-1,1)
-	routers.splice(0,1)
-	var connectionSpeed = lastParts[0].split(' ')[1]
+	var routesText = childrenData[6].innerText ? childrenData[6].innerText.trim() : ''
+	var routers = routesText ? routesText.split(' -> ') : []
+	
+	var connectionSpeed = "Unknown"
+	if (routers.length > 0) {
+		var lastParts = routers.splice(-1,1)
+		routers.splice(0,1)
+		connectionSpeed = lastParts[0].split(' ')[1]
+	}
 
 	var nodeText = childrenData[0].innerText.trim()
 
 	var devId = (nodeText.match(/0x([^ ]+) /))[1]
 	var devIdDec = (nodeText.match(/\\(([0-9]+)\\)/))[1]
 	var devId2 = parseInt("0x"+devId)
-	var label
-	if ($deviceLinks == true) {
-		label = childrenData[4].innerHTML.trim()
-	} else {
+
+	var label = ""
+	var deviceLink = ""
+	if (childrenData[4].innerText != '') {
 		label = childrenData[4].innerText.trim()
+	} else {
+		label = "<NO NAME>"
 	}
+
 	var deviceData = {
 		id: devId,
 		id2: devId2,
@@ -211,7 +218,7 @@ function transformZwaveRow(row) {
 		metrics: statMap,
 		routers: routers,
 		label: label,
-		deviceLink: childrenData[4].innerHTML.trim(),
+		deviceLink: deviceLink,
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routesText,
 		deviceStatus: childrenData[2].innerText.trim(),
@@ -341,7 +348,7 @@ var tableHandle;
 								}
 							}
 						},
-						{ data: 'label', title: 'Device name'},
+						{ data: 'label', title: 'Device name', defaultContent: "!NO DEVICE!"},
 						{ data: 'routersFull', title: 'Repeater', visible: false,
 							render: {'_':'[, ]', sp: '[]'},
 							defaultContent: "None",
@@ -434,7 +441,7 @@ var tableHandle;
 								//\$(td).append(`&nbsp;<button style="float: right;" onclick="displayNeighbors('\${rowData.id}')">View</button>`)
 							}
 						},
-						{ data: 'metrics.Route Changes', title: 'Route Chnges', defaultContent: "n/a", 
+						{ data: 'metrics.Route Changes', title: 'Route Changes', defaultContent: "n/a", 
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData > 1 && cellData <= 4) {
@@ -444,6 +451,8 @@ var tableHandle;
 								}
 							}
 						},
+						{ data: 'metrics.PER', title: 'Error Count', defaultContent: "n/a", searchPands: {show: false}},
+						{ data: 'deviceSecurity', title: 'Security', defaultContent: "Unknown", searchPanes: { controls: false}},
 						{ data: 'routeHtml', title: 'Route' }
 						// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
 						// 	"render": function ( data, type, row ) {
@@ -457,9 +466,9 @@ var tableHandle;
 					"paging": false,
 					"dom": "Pftrip",
 					"searchPanes": {
-						layout: 'columns-5',
+						layout: 'columns-6',
 						cascadePanes: true,
-						order: ['Repeater', 'Status', 'RTT Avg', 'Connection Speed', 'RTT StdDev']
+						order: ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev']
 					}
 				});
 				updateLoading('','');
@@ -529,4 +538,3 @@ def getAccessToken() {
 
 def gitBranch()         { return "beta" }
 def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
- 
