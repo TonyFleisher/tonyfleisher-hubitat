@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.8-beta" }
-private appVerDate() { return "2020-11-27" }
+private releaseVer() { return "0.1.9-beta" }
+private appVerDate() { return "2020-11-28" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -64,6 +64,9 @@ def mainPage() {
 					} else {
 						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
 					}
+				}
+				section("Advanced", hideable: true, hidden: true) {
+					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
 				}
 			} else {
 				section("") {
@@ -100,6 +103,7 @@ tr.shown td.details-control div{
 	transform: none;
 	left: auto;
 }
+
 </style>
 </head>
 <body>
@@ -189,9 +193,16 @@ function transformZwaveRow(row) {
 	var connectionSpeed = lastParts[0].split(' ')[1]
 
 	var nodeText = childrenData[0].innerText.trim()
+
 	var devId = (nodeText.match(/0x([^ ]+) /))[1]
 	var devIdDec = (nodeText.match(/\\(([0-9]+)\\)/))[1]
 	var devId2 = parseInt("0x"+devId)
+	var label
+	if ($deviceLinks == true) {
+		label = childrenData[4].innerHTML.trim()
+	} else {
+		label = childrenData[4].innerText.trim()
+	}
 	var deviceData = {
 		id: devId,
 		id2: devId2,
@@ -199,7 +210,7 @@ function transformZwaveRow(row) {
 		node: nodeText.replace(' ', '&nbsp;'),
 		metrics: statMap,
 		routers: routers,
-		label: childrenData[4].innerText.trim(),
+		label: label,
 		deviceLink: childrenData[4].innerHTML.trim(),
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routesText,
@@ -231,6 +242,20 @@ async function getData() {
 	var tableContent = devList.map( dev => {
 		var routersFull = dev.routers.map(router => fullNameMap[router])
 		var detail = nodeDetails.data[dev.id2.toString()]
+
+		var variance = 0
+		var stdDev = "0.00"
+		
+		var count = detail.transmissionCount
+		if (count > 0) {
+			var totalSquared = Math.pow(detail.sumOfTransmissionTimes,2)
+			var sumOfTransmissionTimesSquared = detail.sumOfTransmissionTimesSquared
+			var ss = (sumOfTransmissionTimesSquared - (totalSquared/count)).toFixed(0)
+			variance = (ss/count).toFixed(2)
+			stdDev = Math.sqrt(variance).toFixed(2)
+		}
+		dev.metrics.rtt_variance = variance
+		dev.metrics.std_dev = stdDev
 		return {...dev, 'routersFull': routersFull, 'detail': detail}
 	})
 
@@ -294,7 +319,7 @@ var tableHandle;
 							"defaultContent": '<div>&nbsp;</div>'
 						},
 						{ data: 'node', title: 'Node' },
-						{ data: 'deviceStatus', title: 'Status',
+						{ data: 'deviceStatus', title: 'Status', searchPanes: {controls: false},
 							render: function(data, type, row) {
 								if (type === 'filter' || type === 'sp' || type === 'display') {
 									return data
@@ -323,8 +348,8 @@ var tableHandle;
 							searchPanes : { orthogonal: 'sp' },
 						},
 						{ data: 'connection', title: 'Connection Speed', defaultContent: "Unknown",
-							searchPanes: { header: 'Speed'}},
-						{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp'},
+							searchPanes: { header: 'Speed', controls: false}},
+						{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp', controls: false},
 							render: function(data, type, row) {
 								var val = data.match(/(\\d*)ms/)[1]
 								if (type === 'filter' || type === 'sp') {
@@ -342,11 +367,37 @@ var tableHandle;
 								if ( val > 500 ) {
 									\$(td).css('color', 'red')
 								} else if (val > 100) {
-									\$(td).css('color', 'orange')
+									\$(td).css('color', 'darkorange')
 								}
 								if (val > 0) {
 									\$(td).append(`<div style="font-size: small;">count: \${rowData.detail.transmissionCount}</div>`)
 								}
+							}
+							
+						},
+						{ data: 'metrics.std_dev', title: 'RTT StdDev', defaultContent: "n/a", searchPanes: {orthogonal: 'sp', controls: false},
+							render: function(data, type, row) {
+								var val = data
+								if (type === 'filter' || type === 'sp') {
+									return ( (val == (undefined || '')) || val.toString() == 'NaN') ? 'unknown' : val < 50 ? '0-50ms' : val <= 500 ? '50-500ms' : val < 1000 ? '500-1000ms' : '> 1000ms'
+								} else if (type === 'sort' || type === 'type') {
+									return val.toString() == 'NaN' ? -2 : val < 0 ? -1 : val
+								} else {
+									return val >= 0 ? 
+										`\${val} ms`
+										: "Data Error"
+								}
+							},
+							createdCell: function (td, cellData, rowData, row, col) {
+								var val = cellData
+								var avg = parseInt(rowData.metrics["RTT Avg"].match(/(\\d*)ms/)[1])
+								console.log("TT: " + val + "tt:" + avg)
+								if ( val > (2 * avg) ) {
+									\$(td).css('color', 'red')
+								} else if (avg > 0 && val > avg ) {
+									\$(td).css('color', 'darkorange')
+								}
+								
 							}
 							
 						},
@@ -363,7 +414,7 @@ var tableHandle;
 							createdCell: function (td, cellData, rowData, row, col) {
 								var val = (cellData === '' ? '' : cellData.match(/([-0-9]*)dB/)[1])
 								if ( val > 0 && val < 17) {
-									\$(td).css('color', 'orange')
+									\$(td).css('color', 'darkorange')
 								} else if (val <= 0) {
 									\$(td).css('color', 'red')
 								}
@@ -375,7 +426,7 @@ var tableHandle;
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData == 2) {
-									\$(td).css('color', 'orange')
+									\$(td).css('color', 'darkorange')
 								} else if (cellData <= 1) {
 									\$(td).css('color', 'red')
 								}
@@ -387,7 +438,7 @@ var tableHandle;
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData > 1 && cellData <= 4) {
-									\$(td).css('color', 'orange')
+									\$(td).css('color', 'darkorange')
 								} else if (cellData > 4) {
 									\$(td).css('color', 'red')
 								}
@@ -406,9 +457,9 @@ var tableHandle;
 					"paging": false,
 					"dom": "Pftrip",
 					"searchPanes": {
-						layout: 'columns-4',
+						layout: 'columns-5',
 						cascadePanes: true,
-						order: ['Repeater', 'Status', 'RTT Avg', 'Connection Speed']
+						order: ['Repeater', 'Status', 'RTT Avg', 'Connection Speed', 'RTT StdDev']
 					}
 				});
 				updateLoading('','');
@@ -427,6 +478,8 @@ var tableHandle;
 							tr.addClass('shown');
 						}
 				} );
+				// Fix width issue
+				\$('input.dtsp-search').width('auto')
 
 			})
 
@@ -473,7 +526,7 @@ def getAccessToken() {
 		return false
 	}
 }
+
 def gitBranch()         { return "beta" }
 def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
- 
  
