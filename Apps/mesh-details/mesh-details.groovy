@@ -31,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.11-beta" }
+private releaseVer() { return "0.1.12-beta" }
 private appVerDate() { return "2020-11-29" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -103,7 +103,21 @@ tr.shown td.details-control div{
 	transform: none;
 	left: auto;
 }
+div.dtsp-meshdetails-6:first-child {
+    min-width: 20%;
+    max-width: 20%;
+}
 
+div.dtsp-meshdetails-6 {
+    min-width: 14%;
+    max-width: 15.5%;
+    padding-left: 0.5%;
+    padding-right: 0.5%;
+    margin: 0px !important;
+}
+div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
+     flex-basis: 120px;
+}
 </style>
 </head>
 <body>
@@ -196,6 +210,10 @@ function transformZwaveRow(row) {
 		connectionSpeed = lastParts[0].split(' ')[1]
 	}
 
+	if (routers.length == 0 && connectionSpeed != '') {
+		routers = ['DIRECT']
+	}
+
 	var nodeText = childrenData[0].innerText.trim()
 
 	var devId = (nodeText.match(/0x([^ ]+) /))[1]
@@ -241,7 +259,8 @@ async function getData() {
 						 return acc;
 					 }, {});
 
-
+	// Pseudo entry for direct-connected devices
+	fullNameMap.DIRECT = 'DIRECT'
 	
 	updateLoading('Loading.','Getting device detail');
 	var nodeDetails = await getZwaveNodeDetail()
@@ -286,11 +305,11 @@ function displayNeighbors(devId) {
 		var val = e[1]
 		var nHex = parseInt(key).toString(16)
 		if (key < 6) { 
-			console.log (`Found neighbor: \${key} name: HUB `)
+			//console.log (`Found neighbor: \${key} name: HUB `)
 			html += `0x0\${key} - HUB`
 		} else {
 			var neighbor = findDeviceByDecId(key)
-			console.log (`Found neighbor: \${key} spead: \${val.speed} repeater?: \${val.repeater} name: \${neighbor.label}` )
+			//console.log (`Found neighbor: \${key} spead: \${val.speed} repeater?: \${val.repeater} name: \${neighbor.label}` )
 			html += `0x\${neighbor.id} - \${neighbor.label}`
 		}
 		html += '<br/>'
@@ -398,7 +417,6 @@ var tableHandle;
 							createdCell: function (td, cellData, rowData, row, col) {
 								var val = cellData
 								var avg = parseInt(rowData.metrics["RTT Avg"].match(/(\\d*)ms/)[1])
-								console.log("TT: " + val + "tt:" + avg)
 								if ( val > (2 * avg) ) {
 									\$(td).css('color', 'red')
 								} else if (avg > 0 && val > avg ) {
@@ -466,7 +484,7 @@ var tableHandle;
 					"paging": false,
 					"dom": "Pftrip",
 					"searchPanes": {
-						layout: 'columns-6',
+						layout: 'meshdetails-6',
 						cascadePanes: true,
 						order: ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev']
 					}

@@ -1,0 +1,27 @@
+{
+  "packageName": "Hubitat Z-Wave Mesh Details",
+  "author": "Tony Fleisher",
+  "minimumHEVersion": "2.2.4",
+  "dateReleased": "2020-11-29",
+  "apps": [
+    {
+      "id": "24761796-feab-41aa-8161-c53fc33eb452",
+      "name": "Hubitat Z-Wave Mesh Details",
+      "namespace": "tfleisher",
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy",
+      "required": true,
+      "oauth": true,
+      "primary": true,
+      "alternateNames": [
+        {
+          "namespace": "tfleisher",
+          "name": "Hubitat-Mesh-Details"
+        }
+      ],
+      "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
+    }
+  ],
+  "version": "0.1.12-beta",
+  "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
+  "releaseNotes": "Improve style"
+}
