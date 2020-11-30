@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.12-beta" }
-private appVerDate() { return "2020-11-29" }
+private releaseVer() { return "0.1.13-beta" }
+private appVerDate() { return "2020-11-30" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -239,7 +239,7 @@ function transformZwaveRow(row) {
 		deviceLink: deviceLink,
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routesText,
-		deviceStatus: childrenData[2].innerText.trim(),
+		deviceStatus: childrenData[2].firstChild.data.trim(),
 		connection: connectionSpeed
 
 	}
