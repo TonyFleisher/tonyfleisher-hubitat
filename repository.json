@@ -1,0 +1,18 @@
+{
+  "author": "Tony Fleisher",
+  "gitHubUrl": "https://github.com/TonyFleisher",
+  "packages": [
+    {
+      "id": "891046ee-56d2-4b07-bd6b-ad3d75612930",
+      "name": "Hubitat Z-Wave Mesh Details",
+      "category": "Utility",
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/packageManifest.json",
+      "description": "A Tool to provide a way to explore Z-Wave Mesh Details. This tool can answer questions like:\n\nWhich devices are acting as repeaters?\nHow many devices are routing through a particular device?\nWhich and How many devices are in a FAILED state?\nWhat devices are neighbors for a given device?",
+      "tags": [
+        "Monitoring",
+        "ZWave",
+        "Tools & Utilities"
+      ]
+    }
+  ]
+}
