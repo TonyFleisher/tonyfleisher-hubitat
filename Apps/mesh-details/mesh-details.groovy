@@ -31,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.13-beta" }
+private releaseVer() { return "0.1.14-beta" }
 private appVerDate() { return "2020-11-30" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -266,7 +266,7 @@ async function getData() {
 	var nodeDetails = await getZwaveNodeDetail()
 
 	var tableContent = devList.map( dev => {
-		var routersFull = dev.routers.map(router => fullNameMap[router] || 'UNKNOWN - ' + router)
+		var routersFull = dev.routers.map(router => fullNameMap[router] || `\${router} - UNKNOWN`)
 		var detail = nodeDetails.data[dev.id2.toString()]
 
 		var variance = 0

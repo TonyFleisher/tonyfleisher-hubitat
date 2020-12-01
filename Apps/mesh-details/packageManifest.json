@@ -21,7 +21,7 @@
       "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
     }
   ],
-  "version": "0.1.13-beta",
+  "version": "0.1.14-beta",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
-  "releaseNotes": "Update for 2.2.4.151"
+  "releaseNotes": "Bugfix for bad route data (from edalquist)"
 }
