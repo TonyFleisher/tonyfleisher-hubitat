@@ -222,7 +222,7 @@ function transformZwaveRow(row) {
 
 	var label = ""
 	var deviceLink = ""
-	if (childrenData[4].innerText != '') {
+	if (childrenData[4].innerText.trim() != '') {
 		label = childrenData[4].innerText.trim()
 	} else {
 		label = "<NO NAME>"
@@ -266,7 +266,7 @@ async function getData() {
 	var nodeDetails = await getZwaveNodeDetail()
 
 	var tableContent = devList.map( dev => {
-		var routersFull = dev.routers.map(router => fullNameMap[router])
+		var routersFull = dev.routers.map(router => fullNameMap[router] || 'UNKNOWN - ' + router)
 		var detail = nodeDetails.data[dev.id2.toString()]
 
 		var variance = 0
