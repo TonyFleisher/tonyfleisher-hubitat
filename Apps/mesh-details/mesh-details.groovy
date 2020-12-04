@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.14-beta" }
-private appVerDate() { return "2020-11-30" }
+private releaseVer() { return "0.1.16-beta" }
+private appVerDate() { return "2020-12-03" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -54,20 +54,32 @@ def mainPage() {
             }
         } else {
 			if (app.getInstallationState() == 'COMPLETE') {
+				if (resetSettings) {
+					resetAppSettings()
+				}
 				section("") {
 					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
 					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
 				}
 				section("") {
 					if(settings?.linkStyle) {
-							href "", title: "Mesh Details", url: getAppEndpointUrl("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+							href "", title: "Mesh Details", url: getAppLink("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
 					} else {
 						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
 					}
 				}
-				// section("Advanced", hideable: true, hidden: true) {
-				// 	input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
-				// }
+				section("Advanced", hideable: true, hidden: true) {
+					input "enableDebug", "bool", title: "Enable debug logs", defaultValue: false, submitOnChange: false
+					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
+                    paragraph "<hr/>"
+					
+					link = getAppEndpointUrl("meshinfo")
+					paragraph "If you accesss the hub by hostname rather than IP address, enter the hostname here"
+					input "hostOverride", "string", title: "Override link host", defaultValue: getLinkHost(link), submitOnChange: false
+					paragraph "Mesh link: ${getAppLink("meshinfo")}"
+					paragraph "Default link: ${link}"
+					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
+				}
 			} else {
 				section("") {
 					paragraph title: "Click Done", "Please click Done to install app before continuing"
@@ -75,6 +87,14 @@ def mainPage() {
 			}
 		}
 	}
+}
+
+def resetAppSettings() {
+	app.removeSetting("deviceLinks")
+	app.removeSetting("linkStyle")
+	app.removeSetting("hostOverride")
+	app.removeSetting("resetSettings")
+
 }
 
 def meshInfo() {
@@ -89,7 +109,7 @@ def meshInfo() {
 <script src="jquery-3.5.1.min.js"></script>
 -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-<script src="${getAppEndpointUrl("script.js")}"></script>
+<script src="${getAppLink("script.js")}"></script>
 <style>
 td.details-control div{
     background: url('/ui2/images/sort_desc.png') no-repeat center center;
@@ -150,6 +170,7 @@ function loadScripts() {
 	.then(s => \$.getScript('https://cdn.datatables.net/searchpanes/1.1.1/js/dataTables.searchPanes.min.js'));
 	return Promise.all([s1, s2]);
 }
+
 // Get transformed list of devices (see transformDevice)
 function getZwaveList() {
 	const instance = axios.create({
@@ -224,6 +245,7 @@ function transformZwaveRow(row) {
 	var deviceLink = ""
 	if (childrenData[4].innerText.trim() != '') {
 		label = childrenData[4].innerText.trim()
+		deviceLink = childrenData[4].firstElementChild.getAttribute('href')
 	} else {
 		label = "<NO NAME>"
 	}
@@ -265,6 +287,9 @@ async function getData() {
 	updateLoading('Loading.','Getting device detail');
 	var nodeDetails = await getZwaveNodeDetail()
 
+	updateLoading('Loading..', 'Building Neighbors Lists')
+	buildNeighborsLists(fullNameMap, nodeDetails.data)
+
 	var tableContent = devList.map( dev => {
 		var routersFull = dev.routers.map(router => fullNameMap[router] || `\${router} - UNKNOWN`)
 		var detail = nodeDetails.data[dev.id2.toString()]
@@ -295,26 +320,94 @@ function findDeviceByDecId(devId) {
 function findDeviceByHexid(devId) {
 	return tableContent.find( row => row.id == devId)
 }
+
+// Map dev id -> [neighbors]
+var neighborsMap = new Map()
+// Map dev id -> [seen by]
+var neighborsMapReverse = new Map()
+// List of ids that are not repeaters
+var nonRepeaters = new Set()
+
+function buildNeighborsLists(fullnameMap, nodeData) {
+	Object.entries(nodeData).forEach(  e1 => {
+			var devId = e1[0]
+			var detail = e1[1]
+			Object.entries(detail.neighbors).forEach( e2 => {
+					var neighborId = e2[0]
+					var neighborDetail = e2[1]
+					if (!neighborsMap.has(devId)) {
+						neighborsMap.set(devId, [])
+					}
+					n = neighborsMap.get(devId)
+					n.push(neighborId)
+
+					if (!neighborsMapReverse.has(neighborId)) {
+						neighborsMapReverse.set(neighborId, [])
+					}
+					r = neighborsMapReverse.get(neighborId)
+					r.push(devId)
+
+					if (neighborDetail.repeater == '0') {
+						nonRepeaters.add(neighborId)
+					}
+
+					var nHex = ('00'+parseInt(neighborId).toString(16)).slice(-2).toUpperCase()
+					if (!fullnameMap[nHex]) {
+						fullnameMap[nHex] = `\${nHex} - UNKNOWN`
+					}
+
+				}
+			)
+		}
+	)
+}
+
 function displayNeighbors(devId) {
 	var neighborList = []
 	var deviceData = tableContent.find( row => row.id == devId)
-	var html = '<div>'
-	html += 'Neighbors:<hr/>'
-	Object.entries(deviceData.detail.neighbors).forEach( (e) => {
-		var key = e[0]
-		var val = e[1]
-		var nHex = parseInt(key).toString(16)
-		if (key < 6) { 
-			//console.log (`Found neighbor: \${key} name: HUB `)
-			html += `0x0\${key} - HUB`
-		} else {
-			var neighbor = findDeviceByDecId(key)
-			//console.log (`Found neighbor: \${key} spead: \${val.speed} repeater?: \${val.repeater} name: \${neighbor.label}` )
-			html += `0x\${neighbor.id} - \${neighbor.label}`
-		}
-		html += '<br/>'
-	})
+	var html = '<div><table>'
+	html += '<tr><th>Neighbors:</th><th>NeghborOf:</th></tr>'
+	html += '<tr>'
+		
+	html += '<td style="vertical-align: top;">'
+	var neighborMap = neighborsMap.get(deviceData.id2.toString())
+	if (neighborMap && neighborMap.length > 0) {
+		neighborMap.forEach( (devId) => {
+			if (devId < 6) { 
+				html += `0x0\${devId} - HUB`
+			} else {
+				var deviceData = findDeviceByDecId(devId)
+				html += `0x\${deviceData.id} - \${deviceData.label}`
+				if (nonRepeaters.has(deviceData.id2.toString())) {
+					html += '<sup style="vertical-align:text-top;">*</sup>'
+				}
+			}
+			html += '<br/>'
+		})
+	}
+	html += '</td>'
 
+	html += '<td style="vertical-align: top;">'
+	var neighborOfMap = neighborsMapReverse.get(deviceData.id2.toString())
+	if (neighborOfMap && neighborOfMap.length > 0) {
+		neighborOfMap.forEach( (devId) => {
+			if (devId < 6) { 
+				html += `0x0\${devId} - HUB`
+			} else {
+				var deviceData = findDeviceByDecId(devId)
+				html += `0x\${deviceData.id} - \${deviceData.label}`
+
+				if (nonRepeaters.has(deviceData.id2.toString())) {
+					html += '<sup style="vertical-align:text-top;">*</sup>'
+				}
+			}
+			html += '<br/>'
+		})
+	}
+	html += '</td>'
+	
+	html += '</tr></table>'
+	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a slave (non-repeater)</p>'
 	html += '</div>'
 	return html
 
@@ -362,12 +455,24 @@ var tableHandle;
 								}
 							},
 							"createdCell": function (td, cellData, rowData, row, col) {
+								var isRepeater = nonRepeaters.has(rowData.id2.toString())
 								if ( cellData != "OK" ) {
-									\$(td).css('color', 'red')
+									if (!isRepeater) {
+										\$(td).css('color', 'red')
+									} else {
+										\$(td).wrapInner('<strike>')
+									}
 								}
 							}
 						},
-						{ data: 'label', title: 'Device name', defaultContent: "!NO DEVICE!"},
+						{ data: 'label', title: 'Device name', defaultContent: "!NO DEVICE!"
+						,
+							createdCell: function (td, cellData, rowData, row, col) {
+								if ($deviceLinks == true){
+									\$(td).wrapInner(`<a href="\${rowData.deviceLink}">`)
+								}
+							}
+						},
 						{ data: 'routersFull', title: 'Repeater', visible: false,
 							render: {'_':'[, ]', sp: '[]'},
 							defaultContent: "None",
@@ -531,7 +636,7 @@ def updated() {
 }
 
 def initialize() {
-	log.debug "Endpoint: ${getAppEndpointUrl('meshinfo')}"
+	if (enableDebug) log.debug "Endpoint: ${getAppLink('meshinfo')}"
 }
  
 def uninstalled() {
@@ -556,3 +661,26 @@ def getAccessToken() {
 
 def gitBranch()         { return "beta" }
 def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
+
+
+String getAppLink(String path) {
+	String link = getAppEndpointUrl(path)
+	if (hostOverride) {
+		link = replaceHostInUrl(link, hostOverride)
+		if (enableDebug) log.debug "Host overrride: ${hostOverride} new link: ${link}"
+	}
+	return link
+}
+
+String replaceHostInUrl(String originalURL, String newHost)
+{
+	URI uri = new URI(originalURL);
+    uri = new URI(uri.getScheme(), newHost,
+        uri.getPath(), uri.getQuery(), uri.getFragment());
+    return uri.toString();
+}
+
+String getLinkHost(String url) {
+	URI uri = new URI(url);
+	return uri.getHost()
+}
