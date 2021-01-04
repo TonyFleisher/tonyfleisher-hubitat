@@ -1,6 +1,7 @@
 {
   "author": "Tony Fleisher",
-  "gitHubUrl": "https://github.com/TonyFleisher",
+  "gitHubUrl": "https://github.com/TonyFleisher/tonyfleisher-hubitat",
+  "payPalUrl": "https://paypal.me/tonyfleisher",
   "packages": [
     {
       "id": "891046ee-56d2-4b07-bd6b-ad3d75612930",
