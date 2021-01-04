@@ -200,6 +200,99 @@ dialog:not([open]) {
 
 def scriptController() {
 	def javaScript = """
+const CMD_CLASS_Names = {
+		0x20: "Basic",
+		0x21: "Controller Replication",
+		0x22: "Application Status",
+		0x25: "Binary Switch",
+		0x26: "Multilevel Switch",
+		0x27: "All Switch (obsoleted)",
+		0x28: "Binary Toggle Switch (obsoleted)",
+		0x29: "Multilevel Toggle Switch (deprecated)",
+		0x2B: "Scene Activation",
+		0x2C: "Scene Actuator Configuration",
+		0x2D: "Scene Controller Configuration",
+		0x30: "Binary Sensor (deprecated)",
+		0x31: "Multilevel Sensor",
+		0x32: "Meter",
+		0x33: "Color Switch",
+		0x35: "Pulse Meter (deprecated)",
+		0x36: "Basic Tariff",
+		0x37: "HRV Status",
+		0x39: "HRV Control",
+		0x3A: "Demand Control Plan Configuration",
+		0x3B: "Demand Control Plan Monitor",
+		0x3C: "Meter Table Configuration",
+		0x3D: "Meter Table Monitor",
+		0x3E: "Meter Table Push Configuration",
+		0x3F: "Prepayment",
+		0x40: "Thermostat Mode",
+		0x41: "Prepayment Encapsulation",
+		0x42: "Thermostat Operating State",
+		0x43: "Thermostat Setpoint",
+		0x44: "Thermostat Fan Mode",
+		0x45: "Thermostat Fan State",
+		0x46: "Climate Control Schedule (deprecated)",
+		0x47: "Thermostat Setback",
+		0x48: "Rate Table Configuration",
+		0x49: "Rate Table Monitor",
+		0x4A: "Tariff Table Configuration",
+		0x4B: "Tariff Table Monitor",
+		0x4C: "Door Lock Logging",
+		0x4E: "Schedule Entry Lock (deprecated)",
+		0x50: "Basic Window Covering (obsoleted)",
+		0x51: "Move to Position Window Covering (obsoleted)",
+		0x53: "Schedule",
+		0x55: "Transport Service",
+		0x56: "CRC-16 Encapsulation (deprecated)",
+		0x57: "Application Capability (obsoleted)",
+		0x59: "Association Group Info",
+		0x5A: "Device Reset Locally",
+		0x5B: "Central Scene",
+		0x5E: "Z-Wave Plus Info",
+		0x60: "Multi Channel",
+		0x62: "Door Lock",
+		0x63: "User Code",
+		0x66: "Barrier Operator",
+		0x6C: "Supervision",
+		0x70: "Configuration",
+		0x71: "Notification (Alarm)",
+		0x72: "Manufacturer Specific",
+		0x73: "Powerlevel",
+		0x75: "Protection",
+		0x76: "Lock (deprecated)",
+		0x77: "Node Naming and Location",
+		0x7A: "Firmware Update Meta Data",
+		0x7B: "Grouping Name (deprecated)",
+		0x7C: "Remote Association Activation (obsoleted)",
+		0x7D: "Remote Association Configuration (obsoleted)",
+		0x80: "Battery",
+		0x81: "Clock",
+		0x82: "Hail (obsoleted)",
+		0x84: "WakeUp",
+		0x85: "Association",
+		0x86: "Version",
+		0x87: "Indicator",
+		0x88: "Proprietary (obsoleted)",
+		0x89: "Language",
+		0x8A: "Time",
+		0x8B: "Time Parameters",
+		0x8C: "Geographic Location",
+		0x8E: "Multi Channel Association",
+		0x8F: "Multi Command",
+		0x90: "Energy Production",
+		0x92: "Screen Meta Data",
+		0x93: "Screen Attributes",
+		0x94: "Simple AV Control",
+		0x98: "Security",
+		0x9A: "IP Configuration (obsoleted)",
+		0x9B: "Association Command Configuration",
+		0x9C: "Alarm Sensor (deprecated)",
+		0x9D: "Alarm Silence",
+		0x9E: "Sensor Configuration (obsoleted)",
+		0x9F: "Security 2"
+}
+
 
 function loadScripts() {
 	updateLoading('Loading...','Getting script sources');
@@ -291,6 +384,18 @@ function transformZwaveRow(row) {
 		label = "<NO NAME>"
 	}
 
+	// Command Classes
+	var commandClassesText = childrenData[3].innerText
+	const CC_REGEX = /in:(.*), out:(.*)/
+	var classesParts = commandClassesText.match(CC_REGEX)
+
+	var inClusters = classesParts && classesParts.length > 1 ? classesParts[1].trim() : undefined
+	var inCommandClasses = inClusters && inClusters.length > 0 ? inClusters.split(', ') : []
+
+	var outClusters = classesParts && classesParts.length > 2 ? classesParts[2].trim() : undefined
+	var outCommandClasses = outClusters && outClusters.length > 0 ? outClusters.split(', ') : []
+	var commandClasses = inCommandClasses.concat(outCommandClasses)
+
 	var deviceData = {
 		id: devId,
 		id2: devId2,
@@ -303,8 +408,9 @@ function transformZwaveRow(row) {
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routesText,
 		deviceStatus: childrenData[2].firstChild.data.trim(),
-		connection: connectionSpeed
-
+		connection: connectionSpeed,
+		commandClasses: commandClasses,
+		isZwavePlus: inCommandClasses.length > 0 && inCommandClasses[0] == '0x5E'
 	}
 	return deviceData
 }
@@ -425,6 +531,20 @@ function displayRowDetail(row) {
 	html += '<tr><th>Neighbors</th><th>NeghborOf</th><th>Actions</tr>'
 	html += '<tr>'
 
+	// Header Row
+	html += '<tr>'
+	html += '<th>Neighbors</th><th>NeghborOf</th>'
+
+	if (data.commandClasses && data.commandClasses.length > 0) {
+		html += '<th>Command Classes</th>'
+	}
+
+	html += '<th>Actions</th>'
+	html += '</tr>'
+	// End Header Row
+
+	html += '<tr>'
+
 	html += '<td style="vertical-align: top;">'
 	var neighborMap = neighborsMap.get(deviceData.id2.toString())
 	if (neighborMap && neighborMap.length > 0) {
@@ -462,6 +582,19 @@ function displayRowDetail(row) {
 	}
 	html += '</td>'
 
+	if (data.commandClasses && data.commandClasses.length > 0) {
+		html += '<td style="vertical-align: top;">'
+		data.commandClasses.forEach( cc => {
+			html += cc
+			var ccVal = Number(cc)
+			if (CMD_CLASS_Names[ccVal]) {
+				html += ` - \${CMD_CLASS_Names[ccVal]}`
+			}
+			html += "<br/>"
+		});
+		html += '</td>'
+	}
+
 	html += '<td style="vertical-align: top;">'
 
 	if ($enableDebug) {
@@ -473,7 +606,7 @@ function displayRowDetail(row) {
 	}
 
 	html += `<button onclick="zwaveNodeRepair(\${data.id2})" class="btn btn-danger btn-nodeDetail">Repair</button>`
-	html+= '</td>'
+	html += '</td>'
 
 	html += '</tr></table>'
 	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a slave (non-repeater)</p>'
