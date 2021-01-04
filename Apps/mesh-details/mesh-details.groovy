@@ -31,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.2.17-dev" }
+private releaseVer() { return "0.2.17-beta" }
 private appVerDate() { return "2021-01-02" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -528,8 +528,6 @@ function displayRowDetail(row) {
 	var data = row.data()
 
 	var html = '<div><table>'
-	html += '<tr><th>Neighbors</th><th>NeghborOf</th><th>Actions</tr>'
-	html += '<tr>'
 
 	// Header Row
 	html += '<tr>'
