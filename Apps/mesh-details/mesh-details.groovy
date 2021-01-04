@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.1.16-beta" }
-private appVerDate() { return "2020-12-03" }
+private releaseVer() { return "0.2.17-dev" }
+private appVerDate() { return "2021-01-02" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -45,6 +45,14 @@ mappings {
 
 def mainPage() {
 	dynamicPage (name: "mainPage", title: "", install: true, uninstall: true) {
+
+		if (resetSettings) {
+			resetAppSettings()
+		}
+		if (resetHost) {
+			resetHostOverride()
+		}
+
 		section("") {
 			label title: "App name"
 		}
@@ -54,30 +62,31 @@ def mainPage() {
             }
         } else {
 			if (app.getInstallationState() == 'COMPLETE') {
-				if (resetSettings) {
-					resetAppSettings()
-				}
 				section("") {
 					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
 					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
 				}
 				section("") {
+					String meshInfoLink = getAppLink("meshinfo")
+
 					if(settings?.linkStyle) {
-							href "", title: "Mesh Details", url: getAppLink("meshinfo"), style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+							href "", title: "Mesh Details", url: meshInfoLink, style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
 					} else {
 						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
 					}
 				}
 				section("Advanced", hideable: true, hidden: true) {
+					
 					input "enableDebug", "bool", title: "Enable debug logs", defaultValue: false, submitOnChange: false
 					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
-                    paragraph "<hr/>"
-					
+                    
+					paragraph "<hr/>"			
 					link = getAppEndpointUrl("meshinfo")
 					paragraph "If you accesss the hub by hostname rather than IP address, enter the hostname here"
 					input "hostOverride", "string", title: "Override link host", defaultValue: getLinkHost(link), submitOnChange: false
 					paragraph "Mesh link: ${getAppLink("meshinfo")}"
 					paragraph "Default link: ${link}"
+					input "resetHost", "bool", title: "Reset link host to default", submitOnChange: true
 					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
 				}
 			} else {
@@ -94,7 +103,15 @@ def resetAppSettings() {
 	app.removeSetting("linkStyle")
 	app.removeSetting("hostOverride")
 	app.removeSetting("resetSettings")
+	app.removeSetting("resetHost")
+	app.removeSetting("enableDebug")
+}
 
+def resetHostOverride() {
+	if (enableDebug) log.debug "Resetting hostOverride"
+	app.removeSetting("hostOverride")
+	app.removeSetting("resetHost")
+	if (enableDebug) log.debug "Host override is: ${hostOverride}"
 }
 
 def meshInfo() {
@@ -138,6 +155,20 @@ div.dtsp-meshdetails-6 {
 div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
      flex-basis: 120px;
 }
+
+dialog {
+  position: fixed;
+  top: 50%;
+  transform: translate(0, -50%);
+}
+
+dialog:not([open]) {
+    display: none;
+}
+
+.btn-nodeDetail {
+  display: block
+}
 </style>
 </head>
 <body>
@@ -150,6 +181,17 @@ div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
 	</thead>
 </table>
 <div>&copy; 2020 Tony Fleisher. All Rights Reserved.</div>
+<dialog id="zwaveRepairStatus">
+    <h3 class="mdl-dialog__title">Z-Wave Repair</h3>
+    <div class="mdl-dialog__content">
+        <p></p>
+        <p style="color: darkblue"><span id="zwave-repair-status"><br><br><br><br></span></p>
+    </div>
+    <div class="mdl-dialog__actions">
+        <button type="button" onclick="closeRepair()" class="mdl-button" id="close-zwave-repair">Close</button>
+        <button type="button" class="mdl-button" onclick="cancelRepair()" id="abort-zwave-repair">Abort</button>
+    </div>
+</dialog>
 </body>
 </html>
 	"""
@@ -162,7 +204,6 @@ def scriptController() {
 function loadScripts() {
 	updateLoading('Loading...','Getting script sources');
 	var s1 = \$.getScript('https://unpkg.com/axios/dist/axios.min.js', function() {
-		console.log("axios loaded")
 	});
 	
 	var s2 = \$.getScript('https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js')
@@ -321,6 +362,14 @@ function findDeviceByHexid(devId) {
 	return tableContent.find( row => row.id == devId)
 }
 
+function decodeSpeed(val) {
+	return val == (undefined || '') ? 'unknown' 
+		: val == '01' ? '9.6 kbps' 
+		: val == '02' ? '40 kbps' 
+		: val == '03' ? '100 kbps' 
+		: 'UNKNOWN'
+}
+
 // Map dev id -> [neighbors]
 var neighborsMap = new Map()
 // Map dev id -> [seen by]
@@ -329,9 +378,13 @@ var neighborsMapReverse = new Map()
 var nonRepeaters = new Set()
 
 function buildNeighborsLists(fullnameMap, nodeData) {
+	neighborsMap = new Map()
+	neighborsMapReverse = new Map()
+	nonRepeaters = new Set()
 	Object.entries(nodeData).forEach(  e1 => {
-			var devId = e1[0]
-			var detail = e1[1]
+		var devId = e1[0]
+		var detail = e1[1]
+		if (detail.neighbors) {
 			Object.entries(detail.neighbors).forEach( e2 => {
 					var neighborId = e2[0]
 					var neighborDetail = e2[1]
@@ -356,19 +409,22 @@ function buildNeighborsLists(fullnameMap, nodeData) {
 						fullnameMap[nHex] = `\${nHex} - UNKNOWN`
 					}
 
-				}
-			)
+			})
 		}
-	)
+	})
 }
 
-function displayNeighbors(devId) {
+
+function displayRowDetail(row) {
+	var devId = row.id()
 	var neighborList = []
 	var deviceData = tableContent.find( row => row.id == devId)
+	var data = row.data()
+
 	var html = '<div><table>'
-	html += '<tr><th>Neighbors:</th><th>NeghborOf:</th></tr>'
+	html += '<tr><th>Neighbors</th><th>NeghborOf</th><th>Actions</tr>'
 	html += '<tr>'
-		
+
 	html += '<td style="vertical-align: top;">'
 	var neighborMap = neighborsMap.get(deviceData.id2.toString())
 	if (neighborMap && neighborMap.length > 0) {
@@ -405,12 +461,89 @@ function displayNeighbors(devId) {
 		})
 	}
 	html += '</td>'
-	
+
+	html += '<td style="vertical-align: top;">'
+
+	if ($enableDebug) {
+		html += '<button class="debug-control" onclick="showDetailDebug(this)" class="btn btn-danger btn-nodeDetail">Show Debug</button>'
+		var pretty = JSON.stringify(data.detail,null,'JSONS')
+		html += '<div hidden="true" class="debug-content"><pre>'
+		html += pretty.replace(/JSONS/g, '&nbsp;&nbsp;')
+		html += '</pre></div>'
+	}
+
+	html += `<button onclick="zwaveNodeRepair(\${data.id2})" class="btn btn-danger btn-nodeDetail">Repair</button>`
+	html+= '</td>'
+
 	html += '</tr></table>'
 	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a slave (non-repeater)</p>'
 	html += '</div>'
 	return html
 
+}
+
+function showDetailDebug(btn) {
+	btn.parentElement.getElementsByClassName('debug-content')[0].hidden=false
+}
+
+function zwaveNodeRepair(zwaveNodeId) {
+
+	\$("#close-zwave-repair").attr("disabled", true)
+	\$("#abort-zwave-repair").attr("disabled", false)
+
+	\$.ajax({
+		url: "/hub/zwaveNodeRepair2?zwaveNodeId="+zwaveNodeId,
+		type: "GET",
+		success: function (data) {
+			console.log(data)
+				repairUpdateInterval = setInterval(checkZwaveRepairStatus, 3000)
+				\$("#zwave-repair-status").html('')
+				if (zwaveRepairStatus.showModal) {
+					zwaveRepairStatus.showModal();
+				}
+		},
+		error: function (data) {
+
+		}
+	});
+};
+
+function checkZwaveRepairStatus(){
+	\$.ajax({
+		url: "/hub/zwaveRepair2Status",
+		type: "GET",
+		dataType: 'JSON',
+		success: function (data) {
+			console.log(data.stage)
+			\$("#zwave-repair-status").html(data.html)
+			if(data.stage === "IDLE"){
+				\$("#close-zwave-repair").attr("disabled", false)
+				\$("#abort-zwave-repair").attr("disabled", true)
+				clearInterval(repairUpdateInterval)
+			} else {
+				\$("#close-zwave-repair").attr("disabled", true)
+				\$("#abort-zwave-repair").attr("disabled", false)
+			}
+		},
+		error: function (data) {
+
+		}
+	});
+}
+
+function cancelRepair() {
+	\$.ajax({
+		url: "/hub/zwaveCancelRepair",
+		type: "GET",
+		success: function(result) {
+
+		}
+	});
+}
+
+function closeRepair() {
+	var dialog = document.querySelector('#zwaveRepairStatus')
+	dialog.close()
 }
 
 \$.ajaxSetup({
@@ -516,7 +649,7 @@ var tableHandle;
 								} else {
 									return val >= 0 ? 
 										`\${val} ms`
-										: "Data Error"
+										: "unknown"
 								}
 							},
 							createdCell: function (td, cellData, rowData, row, col) {
@@ -606,7 +739,7 @@ var tableHandle;
 							tr.removeClass('shown');
 						}
 						else {
-							row.child(displayNeighbors(row.id())).show();
+							row.child(displayRowDetail(row)).show();
 							tr.addClass('shown');
 						}
 				} );
@@ -636,7 +769,7 @@ def updated() {
 }
 
 def initialize() {
-	if (enableDebug) log.debug "Endpoint: ${getAppLink('meshinfo')}"
+	log.info "Endpoint: ${getAppLink('meshinfo')}"
 }
  
 def uninstalled() {
@@ -660,8 +793,8 @@ def getAccessToken() {
 }
 
 def gitBranch()         { return "beta" }
-def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
 
+def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
 
 String getAppLink(String path) {
 	String link = getAppEndpointUrl(path)
