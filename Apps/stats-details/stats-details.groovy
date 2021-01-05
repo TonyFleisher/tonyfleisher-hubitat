@@ -673,7 +673,7 @@ def getAccessToken() {
 		return false
 	}
 }
-def gitBranch()         { return "master" }
+def gitBranch()         { return "alpha" }
 
 def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
 
