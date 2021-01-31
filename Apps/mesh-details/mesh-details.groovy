@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.2.17-beta" }
-private appVerDate() { return "2021-01-02" }
+private releaseVer() { return "0.2.18-beta" }
+private appVerDate() { return "2021-01-31" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -44,13 +44,26 @@ mappings {
 }
 
 def mainPage() {
+
 	dynamicPage (name: "mainPage", title: "", install: true, uninstall: true) {
 
 		if (resetSettings) {
 			resetAppSettings()
 		}
-		if (resetHost) {
+		// Don't need hostoverride anymore
+		if (resetHost || hostOverride) {			
 			resetHostOverride()
+		}
+
+		if (embedStyle && settings?.linkStyle && settings?.linkStyle != 'embedded') {
+			log.debug "Removing unused embedStyle"
+			app.removeSetting('embedStyle')
+		}
+
+		if(settings?.linkStyle && !state?.hasInitializedCols) {
+			if (enableDebug) log.debug "Resetting default column options"
+			app.updateSetting("addCols", ["status","security","rttStdDev","lwrRssi"])
+			state.hasInitializedCols = true
 		}
 
 		section("") {
@@ -65,14 +78,44 @@ def mainPage() {
 				section("") {
 					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
 					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
+					if (settings?.linkStyle == 'embedded') {
+						input "embedStyle", "enum", title: "Embed Style", required: true, submitOnChange: true, options: ["inline": "Display in App screen (alpha feature)", "fullscreen": "Display fullscreen (<b>default</b>)"], defaultValue: "fullscreen"
+					}
 				}
 				section("") {
 					String meshInfoLink = getAppLink("meshinfo")
 
 					if(settings?.linkStyle) {
+						input "addCols", "enum", title: "Select additional columns to display", multiple: true, options: ["status": "Status","security":"Security Mode","rttStdDev":"RTT Std Dev","lwrRssi":"LWR RSSI"], submitOnChange: true
+
+						if (settings?.linkStyle == 'embedded' && !settings?.embedStyle) {
+							paragraph title: "Select Embed Style", "Please Select a Embed style to proceed"
+						} else {
+
+							if (settings?.linkStyle == 'external' || settings?.embedStyle == 'fullscreen') {
 							href "", title: "Mesh Details", url: meshInfoLink, style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+							} else { // Inline
+								paragraph title: "script", """
+									<script id="firstStatsScript">
+									var scriptLoaded; 
+									if (!scriptLoaded) {\$.getScript('${getAppLink("script.js")}')}; 
+									scriptLoaded=true;
+									\$(document).ready( function() {
+										//console.log("ready");
+										\$('#firstStatsScript').parent().hide()
+										var btn = \$("span:contains('Show Mesh Details')").parent()
+										var docURI = btn.attr('href')
+										btn.removeAttr('href')
+										btn.click(function() {  
+											loadScripts().then( r => loadApp(docURI).then(d => doWork()))
+										})
+									})
+									</script>"""
+			                    href "", title: "Show Mesh Details", url: meshInfoLink, style: "embedded", required: false, description: "Tap Here to view the Mesh Details", image: ""
+							}
+						}
 					} else {
-						paragraph title: "Select Link Style", "Please Select a link style to proceed", required: true, state: null
+						paragraph title: "Select Link Style", "Please Select a link style to proceed"
 					}
 				}
 				section("Advanced", hideable: true, hidden: true) {
@@ -81,12 +124,7 @@ def mainPage() {
 					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
                     
 					paragraph "<hr/>"			
-					link = getAppEndpointUrl("meshinfo")
-					paragraph "If you accesss the hub by hostname rather than IP address, enter the hostname here"
-					input "hostOverride", "string", title: "Override link host", defaultValue: getLinkHost(link), submitOnChange: false
-					paragraph "Mesh link: ${getAppLink("meshinfo")}"
-					paragraph "Default link: ${link}"
-					input "resetHost", "bool", title: "Reset link host to default", submitOnChange: true
+
 					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
 				}
 			} else {
@@ -99,19 +137,21 @@ def mainPage() {
 }
 
 def resetAppSettings() {
+	resetHostOverride()
 	app.removeSetting("deviceLinks")
 	app.removeSetting("linkStyle")
-	app.removeSetting("hostOverride")
 	app.removeSetting("resetSettings")
 	app.removeSetting("resetHost")
 	app.removeSetting("enableDebug")
+	app.removeSetting('embedStyle')
+	app.removeSetting("addCols")
+	state.remove('hasInitializedCols')
 }
 
 def resetHostOverride() {
 	if (enableDebug) log.debug "Resetting hostOverride"
 	app.removeSetting("hostOverride")
 	app.removeSetting("resetHost")
-	if (enableDebug) log.debug "Host override is: ${hostOverride}"
 }
 
 def meshInfo() {
@@ -169,11 +209,23 @@ dialog:not([open]) {
 .btn-nodeDetail {
   display: block
 }
+
+#mainTable_wrapper {
+	overflow: auto
+}
+
+.dtsp-searchButtonCont,.dtsp-buttonGroup {
+	display: none !important;
+}
+
+.dtsp-searchPanes .even {
+    background-color: #ffffff !important;
+}
 </style>
 </head>
 <body>
-<h1 style="text-align:center;">Hubitat Z-Wave Mesh Details <div role="doc-subtitle" style="font-size: small;">(v${releaseVer() + ' - ' + appVerDate()})</div> </h1>
-<div id="messages"><div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
+<h1 style="text-align:center; flex-basis:100%;">Hubitat Z-Wave Mesh Details <div role="doc-subtitle" style="font-size: small;">(v${releaseVer() + ' - ' + appVerDate()})</div> </h1>
+<div id="messages" style="text-align:center; flex-basis:100%;"><div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
 <table id="mainTable" class="stripe cell-border hover">
 	<thead>
 	<tr>
@@ -188,8 +240,8 @@ dialog:not([open]) {
         <p style="color: darkblue"><span id="zwave-repair-status"><br><br><br><br></span></p>
     </div>
     <div class="mdl-dialog__actions">
-        <button type="button" onclick="closeRepair()" class="mdl-button" id="close-zwave-repair">Close</button>
-        <button type="button" class="mdl-button" onclick="cancelRepair()" id="abort-zwave-repair">Abort</button>
+        <button type="button" onclick="closeRepair()" class="mdl-button close" id="close-zwave-repair">Close</button>
+        <button type="button" class="mdl-button close" onclick="cancelRepair()" id="abort-zwave-repair">Abort</button>
     </div>
 </dialog>
 </body>
@@ -292,7 +344,6 @@ const CMD_CLASS_Names = {
 		0x9E: "Sensor Configuration (obsoleted)",
 		0x9F: "Security 2"
 }
-
 
 function loadScripts() {
 	updateLoading('Loading...','Getting script sources');
@@ -410,7 +461,8 @@ function transformZwaveRow(row) {
 		deviceStatus: childrenData[2].firstChild.data.trim(),
 		connection: connectionSpeed,
 		commandClasses: commandClasses,
-		isZwavePlus: inCommandClasses.length > 0 && inCommandClasses[0] == '0x5E'
+		isZwavePlusDevice: inCommandClasses.length > 0 && inCommandClasses[0] == '0x5E',
+		isSleepyDevice: inCommandClasses.length > 0 && inCommandClasses[0] == '0x84'
 	}
 	return deviceData
 }
@@ -677,12 +729,54 @@ function closeRepair() {
 	dialog.close()
 }
 
+
+function loadApp(appURI) {
+	const instance = axios.create({
+		timeout: 5000,
+		responseType: "document"
+		});
+
+	return instance
+	.get(appURI)
+	.then(response => {
+		var doc = new jQuery(response.data)
+
+		var h = doc.find('head').children()
+		\$('head').append(h)
+
+        var c = doc.find('body').children()
+		\$('main > :first-child').children().hide()
+        \$('main > :first-child').append(c)
+        var currentPage = \$('#currentPage').val()
+        history.pushState({currentPage: currentPage, previousPage: null, statsLoaded: true, appURI: appURI}, "View Hub Stats", "?page=view&debug=true")
+	})
+	.catch(error => { console.error(error); updateLoading("Error", error);} );
+}
+
+window.onpopstate = function(event) {
+    //console.log("popstate")
+    //console.log(event)
+    if (event.state == null) {
+        return
+    }
+    if (event.state.statsLoaded) {
+        loadScripts().then( r => loadApp(event.state.appURI).then(d => doWork()))
+    } else {
+        location.reload()
+    }
+}
+
 \$.ajaxSetup({
 	cache: true
 	});
 var tableContent;
 var tableHandle;
-\$(document).ready(function(){
+if ( "${settings?.embedStyle}" != 'inline') {
+	\$(document).ready(doWork())
+}
+
+function doWork() {
+
 		loadScripts().then(function() {
 			updateLoading('Loading..','Getting device data');
 			getData().then( r => {	
@@ -702,7 +796,7 @@ var tableHandle;
 							"defaultContent": '<div>&nbsp;</div>'
 						},
 						{ data: 'node', title: 'Node' },
-						{ data: 'deviceStatus', title: 'Status', searchPanes: {controls: false},
+						{ data: 'deviceStatus', title: 'Status', searchPanes: {controls: false}, visible: ${settings?.addCols?.contains("status")},
 							render: function(data, type, row) {
 								if (type === 'filter' || type === 'sp' || type === 'display') {
 									return data
@@ -771,6 +865,7 @@ var tableHandle;
 							
 						},
 						{ data: 'metrics.std_dev', title: 'RTT StdDev', defaultContent: "n/a", searchPanes: {orthogonal: 'sp', controls: false},
+							visible: ${settings?.addCols?.contains("rttStdDev")},
 							render: function(data, type, row) {
 								var val = data
 								if (type === 'filter' || type === 'sp') {
@@ -797,6 +892,7 @@ var tableHandle;
 						},
 
 						{ data: 'metrics.LWR RSSI', title: 'LWR RSSI', defaultContent: "unknown", searchPanes: {show: false},
+							visible: ${settings?.addCols?.contains("lwrRssi")},
 							render: function(data, type, row) {
 								var val = (data === '' ? '' : data.match(/([-0-9]*)dB/)[1])
 								if (type === 'sort' || type === 'type') {
@@ -839,7 +935,9 @@ var tableHandle;
 							}
 						},
 						{ data: 'metrics.PER', title: 'Error Count', defaultContent: "n/a", searchPands: {show: false}},
-						{ data: 'deviceSecurity', title: 'Security', defaultContent: "Unknown", searchPanes: { controls: false}},
+						{ data: 'deviceSecurity', title: 'Security', defaultContent: "Unknown", searchPanes: { controls: false},
+							visible: ${settings?.addCols?.contains("security")}
+						},
 						{ data: 'routeHtml', title: 'Route' }
 						// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
 						// 	"render": function ( data, type, row ) {
@@ -881,7 +979,7 @@ var tableHandle;
 
 			
 		});
-});
+};
 """
 	render contentType: "application/javascript", data: javaScript.replaceAll('\t','  ')
 	
@@ -929,20 +1027,16 @@ def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath 
 
 String getAppLink(String path) {
 	String link = getAppEndpointUrl(path)
-	if (hostOverride) {
-		link = replaceHostInUrl(link, hostOverride)
-		if (enableDebug) log.debug "Host overrride: ${hostOverride} new link: ${link}"
-	}
+	link = removeHostFromURL(link)
 	return link
 }
 
-String replaceHostInUrl(String originalURL, String newHost)
+String removeHostFromURL(String originalURL)
 {
 	URI uri = new URI(originalURL);
-    uri = new URI(uri.getScheme(), newHost,
-        uri.getPath(), uri.getQuery(), uri.getFragment());
-    return uri.toString();
+    return uri.getPath() + (uri.getQuery() ? '?' + uri.getQuery() : '');
 }
+
 
 String getLinkHost(String url) {
 	URI uri = new URI(url);
