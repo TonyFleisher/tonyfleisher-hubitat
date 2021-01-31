@@ -23,5 +23,5 @@
   ],
   "version": "0.2.18-beta",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
-  "releaseNotes": "v0.2.18-beta\n\n * Fix host issues\n * Add ability to select to show/hide some columns\n * Add option to display app in the app screen"
+  "releaseNotes": "v0.2.18-beta\n\n * Fix host issues\n * Add ability to show/hide some columns\n * Add option to display app in the app screen"
 }
