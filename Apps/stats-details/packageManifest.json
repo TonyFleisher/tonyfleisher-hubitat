@@ -1,0 +1,18 @@
+{
+  "packageName": "Hubitat Stats",
+  "author": "Tony Fleisher",
+  "minimumHEVersion": "2.2.4",
+  "dateReleased": "2021-01-30",
+  "apps": [
+    {
+      "id": "e141c388-f543-403a-a4a9-ba7c9de9d98c",
+      "name": "Hubitat Stats Details",
+      "namespace": "tfleisher",
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/alpha/Apps/stats-details/stats-details.groovy",
+      "required": false,
+      "oauth": false,
+      "primary": false,
+      "version": "0.1.2-alpha"
+    }
+  ]
+}
