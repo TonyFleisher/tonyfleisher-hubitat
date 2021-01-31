@@ -2,7 +2,7 @@
   "packageName": "Hubitat Z-Wave Mesh Details",
   "author": "Tony Fleisher",
   "minimumHEVersion": "2.2.4",
-  "dateReleased": "2020-12-03",
+  "dateReleased": "2021-01-30",
   "apps": [
     {
       "id": "24761796-feab-41aa-8161-c53fc33eb452",
