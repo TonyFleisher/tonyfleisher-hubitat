@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.2.18-beta" }
-private appVerDate() { return "2021-01-31" }
+private releaseVer() { return "0.3.20-beta" }
+private appVerDate() { return "2021-02-21" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -44,7 +44,6 @@ mappings {
 }
 
 def mainPage() {
-
 	dynamicPage (name: "mainPage", title: "", install: true, uninstall: true) {
 
 		if (resetSettings) {
@@ -66,6 +65,10 @@ def mainPage() {
 			state.hasInitializedCols = true
 		}
 
+		if (!settings.nodeBase) {
+			app.updateSetting("nodeBase", "base16")
+		}
+
 		section("") {
 			label title: "App name"
 		}
@@ -79,7 +82,7 @@ def mainPage() {
 					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
 					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
 					if (settings?.linkStyle == 'embedded') {
-						input "embedStyle", "enum", title: "Embed Style", required: true, submitOnChange: true, options: ["inline": "Display in App screen (alpha feature)", "fullscreen": "Display fullscreen (<b>default</b>)"]
+						input "embedStyle", "enum", title: "Embed Style", required: true, submitOnChange: true, options: ["inline": "Display in App screen (alpha feature)", "fullscreen": "Display fullscreen (<b>default</b>)"], defaultValue: "fullscreen"
 					}
 				}
 				section("") {
@@ -122,7 +125,8 @@ def mainPage() {
 					
 					input "enableDebug", "bool", title: "Enable debug logs", defaultValue: false, submitOnChange: false
 					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
-                    
+					input "nodeBase", "enum", title: "Display nodes as hex or base10?", multiple: false, options: ["base16": "base16 (default)", "base10":"base10"], submitOnChange: true
+                   
 					paragraph "<hr/>"			
 
 					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
@@ -159,6 +163,7 @@ def meshInfo() {
 <html lang="en">
 <head>
 <title>Hubitat Z-Wave Mesh Details</title>
+<link rel="stylesheet" type="text/css" href="/ui2/css/styles.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/searchpanes/1.1.1/css/searchPanes.dataTables.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css">
@@ -196,11 +201,13 @@ div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
      flex-basis: 120px;
 }
 
+/*
 dialog {
   position: fixed;
   top: 50%;
   transform: translate(0, -50%);
 }
+*/
 
 dialog:not([open]) {
     display: none;
@@ -226,15 +233,32 @@ dialog:not([open]) {
 <body>
 <h1 style="text-align:center; flex-basis:100%;">Hubitat Z-Wave Mesh Details <div role="doc-subtitle" style="font-size: small;">(v${releaseVer() + ' - ' + appVerDate()})</div> </h1>
 <div id="messages" style="text-align:center; flex-basis:100%;"><div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
-<table id="mainTable" class="stripe cell-border hover">
+<div id="view-topology-div">
+	<button type="button" id="view-topology" data-toggle="modal" type="button" onclick="getTopologyModal()">
+		View Z-Wave Topology
+	</button>
+</div>
+<table id="mainTable" class="stripe cell-border hover" style="width: 100%">
 	<thead>
 	<tr>
 	</tr>
 	</thead>
 </table>
-<div>&copy; 2020 Tony Fleisher. All Rights Reserved.</div>
+<div style="text-align:center;">&copy; 2020 Tony Fleisher. All Rights Reserved.</div>
+<dialog id="topologyDialog">
+    <span class="mdl-dialog__title">Z-Wave Topology</span>
+	<button id="hidRepeatersBtn" onclick="hideNonRepeaters()" data-toggle="modal">Hide NonRepeaters</button>
+	<button id="hidRepeatersBtn" onclick="getTopologyModal()" data-toggle="modal">Refresh</button>
+    <div class="mdl-dialog__content">
+        <p></p>
+        <p style="color: darkblue"><span id="zwave-topology-table"></span></p>
+    </div>
+    <div class="mdl-dialog__actions">
+        <button type="button" onclick="closeTopology()" class="mdl-button close" id="close-zwave-topology">Close</button>
+    </div>
+</dialog>
 <dialog id="zwaveRepairStatus">
-    <h3 class="mdl-dialog__title">Z-Wave Repair</h3>
+    <span class="mdl-dialog__title">Z-Wave Repair</span>
     <div class="mdl-dialog__content">
         <p></p>
         <p style="color: darkblue"><span id="zwave-repair-status"><br><br><br><br></span></p>
@@ -345,14 +369,39 @@ const CMD_CLASS_Names = {
 		0x9F: "Security 2"
 }
 
+function useHex() {
+	return "${settings?.nodeBase}" === "base16"
+}
+
 function loadScripts() {
+	\$.get('/ui2/js/hubitat.min.js')
 	updateLoading('Loading...','Getting script sources');
 	var s1 = \$.getScript('https://unpkg.com/axios/dist/axios.min.js', function() {
+		//console.log("axios loaded")
 	});
 	
 	var s2 = \$.getScript('https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js')
 	.then(s => \$.getScript('https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js'))
-	.then(s => \$.getScript('https://cdn.datatables.net/searchpanes/1.1.1/js/dataTables.searchPanes.min.js'));
+	.then(s => \$.getScript('https://cdn.datatables.net/searchpanes/1.1.1/js/dataTables.searchPanes.min.js'))
+	.then(s => {
+
+		function numberSort(a,b) {
+			var token1a = a.split('-',2)[0].trim()
+			var token1b = b.split('-',2)[0].trim()
+			var vala = parseInt(token1a)
+			var valb = parseInt(token1b)
+			return vala < valb ? -1 : 1			
+		}
+		jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+			"initialNumber-asc": function ( a, b ) {
+				return numberSort(a,b);
+			},
+			"initialNumber-desc": function ( a, b ) {
+				return numberSort(a,b) * -1;
+			},
+		})
+	})
+	;
 	return Promise.all([s1, s2]);
 }
 
@@ -457,12 +506,12 @@ function transformZwaveRow(row) {
 		label: label,
 		deviceLink: deviceLink,
 		deviceSecurity: childrenData[5].innerText.trim(),
-		routeHtml: routesText,
+		routeHtml: routers.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` -> \${v}`, "") + (routers[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + devId : devId2}`) ,
 		deviceStatus: childrenData[2].firstChild.data.trim(),
 		connection: connectionSpeed,
 		commandClasses: commandClasses,
 		isZwavePlusDevice: inCommandClasses.length > 0 && inCommandClasses[0] == '0x5E',
-		isSleepyDevice: inCommandClasses.length > 0 && inCommandClasses[0] == '0x84'
+		isSleepyDevice: inCommandClasses.length > 0 && inCommandClasses.includes('0x84')
 	}
 	return deviceData
 }
@@ -476,7 +525,7 @@ async function getData() {
 
 	var devList = await getZwaveList()
 	var fullNameMap = devList.reduce( (acc,val) => {
-						 acc[val.id]= `\${val.id} - \${val.label}`;
+						 acc[useHex() ? `0x\${val.id}` : val.id2]= `\${useHex() ? `0x\${val.id}` : val.id2} - \${val.label}`;
 						 return acc;
 					 }, {});
 
@@ -516,7 +565,7 @@ function findDeviceByDecId(devId) {
 	return tableContent.find( row => row.id2 == devId)
 }
 
-function findDeviceByHexid(devId) {
+function findDeviceByHexId(devId) {
 	return tableContent.find( row => row.id == devId)
 }
 
@@ -583,6 +632,7 @@ function displayRowDetail(row) {
 
 	// Header Row
 	html += '<tr>'
+	html += '<th>Repeaters</th>'
 	html += '<th>Neighbors</th><th>NeghborOf</th>'
 
 	if (data.commandClasses && data.commandClasses.length > 0) {
@@ -594,16 +644,20 @@ function displayRowDetail(row) {
 	// End Header Row
 
 	html += '<tr>'
+	html += '<td style="vertical-align: top;">'
+	html += deviceData.routersFull.join('<br/>')
 
 	html += '<td style="vertical-align: top;">'
 	var neighborMap = neighborsMap.get(deviceData.id2.toString())
 	if (neighborMap && neighborMap.length > 0) {
 		neighborMap.forEach( (devId) => {
 			if (devId < 6) { 
-				html += `0x0\${devId} - HUB`
+				html += useHex() ? '0x' : ''
+				html += `\${devId} - HUB`
 			} else {
 				var deviceData = findDeviceByDecId(devId)
-				html += `0x\${deviceData.id} - \${deviceData.label}`
+				html += useHex() ? `0x\${deviceData.id}` : deviceData.id2
+				html += ` - \${deviceData.label}`
 				if (nonRepeaters.has(deviceData.id2.toString())) {
 					html += '<sup style="vertical-align:text-top;">*</sup>'
 				}
@@ -618,10 +672,12 @@ function displayRowDetail(row) {
 	if (neighborOfMap && neighborOfMap.length > 0) {
 		neighborOfMap.forEach( (devId) => {
 			if (devId < 6) { 
-				html += `0x0\${devId} - HUB`
+				html += useHex() ? '0x' : ''
+				html += `\${devId} - HUB`
 			} else {
 				var deviceData = findDeviceByDecId(devId)
-				html += `0x\${deviceData.id} - \${deviceData.label}`
+				html += useHex() ? `0x\${deviceData.id}` : deviceData.id2
+				html += ` - \${deviceData.label}`
 
 				if (nonRepeaters.has(deviceData.id2.toString())) {
 					html += '<sup style="vertical-align:text-top;">*</sup>'
@@ -673,7 +729,9 @@ function zwaveNodeRepair(zwaveNodeId) {
 
 	\$("#close-zwave-repair").attr("disabled", true)
 	\$("#abort-zwave-repair").attr("disabled", false)
-
+	if (dialogPolyfill && !zwaveRepairStatus.showModal) {
+             dialogPolyfill.registerDialog(zwaveRepairStatus);
+    }
 	\$.ajax({
 		url: "/hub/zwaveNodeRepair2?zwaveNodeId="+zwaveNodeId,
 		type: "GET",
@@ -714,6 +772,20 @@ function checkZwaveRepairStatus(){
 	});
 }
 
+function getTopologyModal() {
+	if (dialogPolyfill && !topologyDialog.showModal) {
+		dialogPolyfill.registerDialog(topologyDialog);
+	}
+	\$.ajax({
+		url: "/hub/zwaveTopology",
+		type: "GET",
+		success: function(result) {
+			\$("#zwave-topology-table").html(result);
+			topologyDialog.showModal();
+		}
+	});
+}
+
 function cancelRepair() {
 	\$.ajax({
 		url: "/hub/zwaveCancelRepair",
@@ -729,6 +801,44 @@ function closeRepair() {
 	dialog.close()
 }
 
+function closeTopology() {
+	var dialog = document.querySelector('#topologyDialog')
+	dialog.close()
+}
+
+function hideNonRepeaters() {
+	topr = \$('#topologyDialog table tbody tr:nth-child(1)') // Get the top row with nodes (hex starting in position 2)
+	rowItems = topr[0].innerText.split(/\\s+/) // Split into a list
+	rowItems.slice(2).forEach( (item,index) => {
+		if(item.match(/[A-F0-9]/)) {
+			if ($enableDebug) console.log(`Testing \${item}`)
+			const d = findDeviceByHexId(item)
+			if (d.isSleepyDevice) {
+				if ($enableDebug) console.log(`\${item} is sleepy; hiding`)
+				\$(`#topologyDialog table tbody tr td:nth-child(\${index+3})`).hide()
+				\$(`#topologyDialog table tbody tr:nth-child(\${index+3})`).hide()
+			} else {
+				if ($enableDebug) console.log('not sleepy')
+			}
+			if (nonRepeaters.has(d.id2.toString())) {
+				if ($enableDebug) console.log(`\${item} is not a repeater; hiding`)
+				\$(`#topologyDialog table tbody tr td:nth-child(\${index+3})`).hide()
+				\$(`#topologyDialog table tbody tr:nth-child(\${index+3})`).hide()
+			} else {
+				if ($enableDebug) console.log('not in nonrepeaters list')
+			}
+
+			var neighborOfMap = neighborsMapReverse.get(d.id2.toString())
+			if (!neighborOfMap || neighborOfMap.length == 0) {
+				if ($enableDebug) console.log(`\${item} is not seen by any other device; hiding`)
+				\$(`#topologyDialog table tbody tr td:nth-child(\${index+3})`).hide()
+				\$(`#topologyDialog table tbody tr:nth-child(\${index+3})`).hide()
+			} else {
+				if ($enableDebug) console.log(`has neighbors: ${neighborOfMap}`)
+			}
+		}
+	})
+}
 
 function loadApp(appURI) {
 	const instance = axios.create({
@@ -795,7 +905,11 @@ function doWork() {
 							"data":           null,
 							"defaultContent": '<div>&nbsp;</div>'
 						},
-						{ data: 'node', title: 'Node' },
+						{ data: useHex() ? 'id' : 'id2', title: 'Node',
+							render: function(data, type, row) {
+								return useHex() ? `0x\${data}` : data
+							},
+						},
 						{ data: 'deviceStatus', title: 'Status', searchPanes: {controls: false}, visible: ${settings?.addCols?.contains("status")},
 							render: function(data, type, row) {
 								if (type === 'filter' || type === 'sp' || type === 'display') {
@@ -835,8 +949,9 @@ function doWork() {
 							render: {'_':'[, ]', sp: '[]'},
 							defaultContent: "None",
 							searchPanes : { orthogonal: 'sp' },
+							type: 'initialNumber'
 						},
-						{ data: 'connection', title: 'Connection Speed', defaultContent: "Unknown",
+						{ data: 'connection', title: 'Connection <br/>Speed', defaultContent: "Unknown",
 							searchPanes: { header: 'Speed', controls: false}},
 						{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp', controls: false},
 							render: function(data, type, row) {
@@ -912,7 +1027,7 @@ function doWork() {
 							}
 
 						},
-						{ data: 'metrics.Neighbors', title: 'Neighbor Count', defaultContent: "n/a", 
+						{ data: 'metrics.Neighbors', title: 'Neighbor<br/>Count', defaultContent: "n/a", 
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData == 2) {
@@ -921,10 +1036,9 @@ function doWork() {
 									\$(td).css('color', 'red')
 								}
 								\$(td).addClass('neighbors-' + rowData.id2)
-								//\$(td).append(`&nbsp;<button style="float: right;" onclick="displayNeighbors('\${rowData.id}')">View</button>`)
 							}
 						},
-						{ data: 'metrics.Route Changes', title: 'Route Changes', defaultContent: "n/a", 
+						{ data: 'metrics.Route Changes', title: 'Route<br/>Changes', defaultContent: "n/a", 
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData > 1 && cellData <= 4) {
@@ -934,11 +1048,11 @@ function doWork() {
 								}
 							}
 						},
-						{ data: 'metrics.PER', title: 'Error Count', defaultContent: "n/a", searchPands: {show: false}},
+						{ data: 'metrics.PER', title: 'Error<br/>Count', defaultContent: "n/a", searchPands: {show: false}},
 						{ data: 'deviceSecurity', title: 'Security', defaultContent: "Unknown", searchPanes: { controls: false},
 							visible: ${settings?.addCols?.contains("security")}
 						},
-						{ data: 'routeHtml', title: 'Route' }
+						{ data: 'routeHtml', title: 'Route<br/>(from&nbsp;Hub)' }
 						// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
 						// 	"render": function ( data, type, row ) {
 						// 		return JSON.stringify(data);
