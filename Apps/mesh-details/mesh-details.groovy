@@ -225,7 +225,7 @@ dialog:not([open]) {
 	display: none !important;
 }
 
-.dtsp-searchPanes .even {
+.dtsp-searchPanes .even:not(.selected) {
     background-color: #ffffff !important;
 }
 </style>
@@ -390,6 +390,8 @@ function loadScripts() {
 			var token1b = b.split('-',2)[0].trim()
 			var vala = parseInt(token1a)
 			var valb = parseInt(token1b)
+			if (!vala) return 1;
+			if (!valb) return -1;
 			return vala < valb ? -1 : 1			
 		}
 		jQuery.extend( jQuery.fn.dataTableExt.oSort, {
@@ -463,6 +465,7 @@ function transformZwaveRow(row) {
 		var lastParts = routers.splice(-1,1)
 		routers.splice(0,1)
 		connectionSpeed = lastParts[0].split(' ')[1]
+			routers = routers.map(r => useHex() ? "0x" + r : parseInt("0x"+r))
 	}
 
 	if (routers.length == 0 && connectionSpeed != '') {
@@ -646,6 +649,7 @@ function displayRowDetail(row) {
 	html += '<tr>'
 	html += '<td style="vertical-align: top;">'
 	html += deviceData.routersFull.join('<br/>')
+	html += '</td>'
 
 	html += '<td style="vertical-align: top;">'
 	var neighborMap = neighborsMap.get(deviceData.id2.toString())
@@ -894,6 +898,7 @@ function doWork() {
 				tableContent = r;
 
 				updateLoading('Loading..','Creating table');
+				var idCol = useHex() ? 'id' : 'id2';
 				tableHandle = \$('#mainTable').DataTable({
 					data: tableContent,
 					order: [[1,'asc']],
