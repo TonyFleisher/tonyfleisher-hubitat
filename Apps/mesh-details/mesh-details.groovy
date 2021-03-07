@@ -636,7 +636,7 @@ function displayRowDetail(row) {
 	// Header Row
 	html += '<tr>'
 	html += '<th>Repeaters</th>'
-	html += '<th>Neighbors</th><th>NeghborOf</th>'
+	html += '<th>Neighbors</th><th>NeighborOf</th>'
 
 	if (data.commandClasses && data.commandClasses.length > 0) {
 		html += '<th>Command Classes</th>'
