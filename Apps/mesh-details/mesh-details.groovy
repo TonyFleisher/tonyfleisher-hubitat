@@ -411,7 +411,7 @@ function loadScripts() {
 function getZwaveList() {
 	const instance = axios.create({
 		timeout: 5000,
-		responseType: "document"
+		responseType: "stream"
 		});
 
 	return instance
@@ -487,7 +487,13 @@ function transformZwaveRow(row) {
 		label = "<NO NAME>"
 	}
 
+	var typeParts = childrenData[3].innerHTML.split("<br>")
+	if (typeParts && typeParts.length >= 2) {
+		var type = translateDeviceType(typeParts[0])
+		var brand = typeParts[1]
+	}
 	// Command Classes
+/*	No longer included in the zwave info
 	var commandClassesText = childrenData[3].innerText
 	const CC_REGEX = /in:(.*), out:(.*)/
 	var classesParts = commandClassesText.match(CC_REGEX)
@@ -497,7 +503,7 @@ function transformZwaveRow(row) {
 
 	var outClusters = classesParts && classesParts.length > 2 ? classesParts[2].trim() : undefined
 	var outCommandClasses = outClusters && outClusters.length > 0 ? outClusters.split(', ') : []
-	var commandClasses = inCommandClasses.concat(outCommandClasses)
+	var commandClasses = inCommandClasses.concat(outCommandClasses)*/
 
 	var deviceData = {
 		id: devId,
@@ -507,6 +513,8 @@ function transformZwaveRow(row) {
 		metrics: statMap,
 		routers: routers,
 		label: label,
+		type: type,
+		brand: brand,
 		deviceLink: deviceLink,
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routers.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` -> \${v}`, "") + (routers[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + devId : devId2}`) ,
@@ -517,6 +525,185 @@ function transformZwaveRow(row) {
 		isSleepyDevice: inCommandClasses.length > 0 && inCommandClasses.includes('0x84')
 	}
 	return deviceData
+}
+
+function translateDeviceType(deviceType) {
+	switch (deviceType) {
+		case "SPECIFIC_TYPE_DOORBELL":
+			return "Doorbell"
+		case "SPECIFIC_TYPE_SATELLITE_RECEIVER":
+			return "Satellite Receiver" 
+		case "SPECIFIC_TYPE_SATELLITE_RECEIVER_V2":
+			return "Satellite Receiver V2" 
+		case "SPECIFIC_TYPE_SOUND_SWITCH":
+			return "Sound Switch"
+		case "SPECIFIC_TYPE_SIMPLE_DISPLAY":
+			return "Simple Display" 
+		case "SPECIFIC_TYPE_DOOR_LOCK":
+			return "Door Lock" 
+		case "SPECIFIC_TYPE_ADVANCED_DOOR_LOCK":
+			return "Advanced Door Lock" 
+		case "SPECIFIC_TYPE_SECURE_KEYPAD_DOOR_LOCK":
+			return "Secure Keypad Door Lock" 
+		case "SPECIFIC_TYPE_SECURE_KEYPAD_DOOR_LOCK_DEADBOLT":
+			return "Door Lock Keypad Deadbolt" 
+		case "SPECIFIC_TYPE_SECURE_DOOR":
+			return "Secure Door" 
+		case "SPECIFIC_TYPE_SECURE_GATE":
+			return "Secure Gate" 
+		case "SPECIFIC_TYPE_SECURE_BARRIER_ADDON":
+			return "Secure Barrier Addon" 
+		case "SPECIFIC_TYPE_SECURE_BARRIER_OPEN_ONLY":
+			return "Secure Barrier Open Only" 
+		case "SPECIFIC_TYPE_SECURE_BARRIER_CLOSE_ONLY":
+			return "Secure Barrier Close Only" 
+		case "SPECIFIC_TYPE_SECURE_LOCKBOX":
+			return "Secure Lockbox" 
+		case "SPECIFIC_TYPE_SECURE_KEYPAD":
+			return "Secure Keypad"
+		case "SPECIFIC_TYPE_PORTABLE_REMOTE_CONTROLLER":
+			return "Portable Remote Controller" 
+		case "SPECIFIC_TYPE_PORTABLE_SCENE_CONTROLLER":
+			return "Portable Scene Controller" 
+		case "SPECIFIC_TYPE_PORTABLE_INSTALLER_TOOL":
+			return "Portable Installer Tool"
+		case "SPECIFIC_TYPE_REMOTE_CONTROL_AV":
+			return "Remote Control AV" 
+		case "SPECIFIC_TYPE_REMOTE_CONTROL_SIMPLE":
+			return "Remote Control Simple" 
+		case "SPECIFIC_TYPE_SIMPLE_METER":
+			return "Simple Meter" 
+		case "SPECIFIC_TYPE_ADV_ENERGY_CONTROL":
+			return "Adv Energy Control" 
+		case "SPECIFIC_TYPE_WHOLE_HOME_METER_SIMPLE":
+			return "Whole Home Meter Simple" 
+		case "SPECIFIC_TYPE_REPEATER_SLAVE":
+			return "Repeater Slave" 
+		case "SPECIFIC_TYPE_VIRTUAL_NODE":
+			return "Virtual Node"
+		case "SPECIFIC_TYPE_ZONED_SECURITY_PANEL":
+			return "Zoned Security Panel"
+		case "SPECIFIC_TYPE_ENERGY_PRODUCTION":
+			return "Energy Production" 
+		case "SPECIFIC_TYPE_ADV_ZENSOR_NET_ALARM_SENSOR":
+			return "Adv Zensor Net Alarm Sensor"
+		case "SPECIFIC_TYPE_ADV_ZENSOR_NET_SMOKE_SENSOR":
+			return "Adv Zensor Net Smoke Sensor"
+		case "SPECIFIC_TYPE_BASIC_ROUTING_ALARM_SENSOR":
+			return "Basic Routing Alarm Sensor"
+		case "SPECIFIC_TYPE_BASIC_ROUTING_SMOKE_SENSOR":
+			return "Basic Routing Smoke Sensor"
+		case "SPECIFIC_TYPE_BASIC_ZENSOR_NET_ALARM_SENSOR":
+			return "Basic Zensor Net Alarm Sensor"
+		case "SPECIFIC_TYPE_BASIC_ZENSOR_NET_SMOKE_SENSOR":
+			return "Basic Zensor Net Smoke Sensor"
+		case "SPECIFIC_TYPE_ROUTING_ALARM_SENSOR":
+			return "Routing Alarm Sensor"
+		case "SPECIFIC_TYPE_ROUTING_SMOKE_SENSOR":
+			return "Routing Smoke Sensor"
+		case "SPECIFIC_TYPE_ZENSOR_NET_ALARM_SENSOR":
+			return "Zensor Net Alarm Sensor"
+		case "SPECIFIC_TYPE_ZENSOR_NET_SMOKE_SENSOR":
+			return "Zensor Net Smoke Sensor"
+		case "SPECIFIC_TYPE_ALARM_SENSOR":
+			return "Alarm Sensor" 
+		case "SPECIFIC_TYPE_ROUTING_SENSOR_BINARY":
+			return "Routing Sensor Binary" 
+		case "SPECIFIC_TYPE_ROUTING_SENSOR_MULTILEVEL":
+			return "Routing Sensor Multilevel" 
+		case "SPECIFIC_TYPE_CHIMNEY_FAN":
+			return "Chimney Fan"
+		case "SPECIFIC_TYPE_PC_CONTROLLER":
+			return "Pc Controller" 
+		case "SPECIFIC_TYPE_SCENE_CONTROLLER":
+			return "Scene Controller" 
+		case "SPECIFIC_TYPE_STATIC_INSTALLER_TOOL":
+			return "Static Installer Tool"
+		case "SPECIFIC_TYPE_SET_TOP_BOX":
+			return "Set Top Box" 
+		case "SPECIFIC_TYPE_SUB_SYSTEM_CONTROLLER":
+			return "Sub System Controller" 
+		case "SPECIFIC_TYPE_TV":
+			return "TV" 
+		case "SPECIFIC_TYPE_GATEWAY":
+			return "Gateway" 
+		case "SPECIFIC_TYPE_POWER_SWITCH_BINARY":
+			return "Power Switch Binary" 
+		case "SPECIFIC_TYPE_SCENE_SWITCH_BINARY":
+			return "Scene Switch Binary" 
+		case "SPECIFIC_TYPE_POWER_STRIP":
+			return "Power Strip" 
+		case "SPECIFIC_TYPE_SIREN":
+			return "Siren" 
+		case "SPECIFIC_TYPE_VALVE_OPEN_CLOSE":
+			return "Valve Open/Close" 
+		case "SPECIFIC_TYPE_COLOR_TUNABLE_BINARY":
+			return "Binary Tunable Color Light"
+		case "SPECIFIC_TYPE_IRRIGATION_CONTROLLER":
+			return "Irrigation Controller"
+		case "SPECIFIC_TYPE_CLASS_A_MOTOR_CONTROL":
+			return "Class A Motor Control" 
+		case "SPECIFIC_TYPE_CLASS_B_MOTOR_CONTROL":
+			return "Class B Motor Control" 
+		case "SPECIFIC_TYPE_CLASS_C_MOTOR_CONTROL":
+			return "Class C Motor Control" 
+		case "SPECIFIC_TYPE_MOTOR_MULTIPOSITION":
+			return "Motor Multiposition" 
+		case "SPECIFIC_TYPE_POWER_SWITCH_MULTILEVEL":
+			return "Power Switch Multilevel" 
+		case "SPECIFIC_TYPE_SCENE_SWITCH_MULTILEVEL":
+			return "Scene Switch Multilevel" 
+		case "SPECIFIC_TYPE_FAN_SWITCH":
+			return "Fan Switch" 
+		case "SPECIFIC_TYPE_COLOR_TUNABLE_MULTILEVEL":
+			return "Multilevel Tunable Color Light"
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_BINARY":
+			return "Switch Remote Binary" 
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_MULTILEVEL":
+			return "Switch Remote Multilevel" 
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_TOGGLE_BINARY":
+			return "Switch Remote Toggle Binary" 
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_TOGGLE_MULTILEVEL":
+			return "Switch Remote Toggle Multilevel" 
+		case "SPECIFIC_TYPE_SWITCH_TOGGLE_BINARY":
+			return "Switch Toggle Binary" 
+		case "SPECIFIC_TYPE_SWITCH_TOGGLE_MULTILEVEL":
+			return "Switch Toggle Multilevel" 
+		case "SPECIFIC_TYPE_SETBACK_SCHEDULE_THERMOSTAT":
+			return "Setback Schedule Thermostat" 
+		case "SPECIFIC_TYPE_SETBACK_THERMOSTAT":
+			return "Setback Thermostat" 
+		case "SPECIFIC_TYPE_SETPOINT_THERMOSTAT":
+			return "Setpoint Thermostat"
+		case "SPECIFIC_TYPE_THERMOSTAT_GENERAL":
+			return "Thermostat General" 
+		case "SPECIFIC_TYPE_THERMOSTAT_GENERAL_V2":
+			return "Thermostat General V2" 
+		case "SPECIFIC_TYPE_THERMOSTAT_HEATING":
+			return "Thermostat Heating" 
+		case "SPECIFIC_TYPE_RESIDENTIAL_HRV":
+			return "Residential Hrv"
+		case "SPECIFIC_TYPE_SIMPLE_WINDOW_COVERING":
+			return "Simple Window Covering" 
+		case "SPECIFIC_TYPE_ZIP_ADV_NODE":
+			return "Zip Adv Node"
+		case "SPECIFIC_TYPE_ZIP_TUN_NODE":
+			return "Zip Tun Node"
+		case "SPECIFIC_TYPE_BASIC_WALL_CONTROLLER":
+			return "Basic Wall Controller" 
+		case "SPECIFIC_TYPE_SECURE_EXTENDER":
+			return "Secure Extender" 
+		case "SPECIFIC_TYPE_GENERAL_APPLIANCE":
+			return "General Appliance"
+		case "SPECIFIC_TYPE_KITCHEN_APPLIANCE":
+			return "Kitchen Appliance"
+		case "SPECIFIC_TYPE_LAUNDRY_APPLIANCE":
+			return "Laundry Appliance"
+		case "SPECIFIC_TYPE_NOTIFICATION_SENSOR":
+			return "Notification Sensor"
+		default:
+			return deviceType
+	}
 }
 
 function updateLoading(msg1, msg2) {
@@ -950,6 +1137,8 @@ function doWork() {
 								}
 							}
 						},
+						{ data: 'type', title: 'Device type', defaultContent: "!NO DEVICE!" },
+						{ data: 'brand', title: 'Manufacturer', defaultContent: "!NO DEVICE!" },
 						{ data: 'routersFull', title: 'Repeater', visible: false,
 							render: {'_':'[, ]', sp: '[]'},
 							defaultContent: "None",
