@@ -483,6 +483,7 @@ function transformZwaveRow(row) {
 	if (childrenData[4].innerText.trim() != '') {
 		label = childrenData[4].innerText.trim()
 		deviceLink = childrenData[4].firstElementChild.getAttribute('href')
+		hubDeviceId = deviceLink.split('/')[2]
 	} else {
 		label = "<NO NAME>"
 	}
@@ -493,7 +494,7 @@ function transformZwaveRow(row) {
 		var brand = typeParts[1]
 	}
 	// Command Classes
-/*	No longer included in the zwave info
+/*	No longer included in the zwave info */
 	var commandClassesText = childrenData[3].innerText
 	const CC_REGEX = /in:(.*), out:(.*)/
 	var classesParts = commandClassesText.match(CC_REGEX)
@@ -503,7 +504,7 @@ function transformZwaveRow(row) {
 
 	var outClusters = classesParts && classesParts.length > 2 ? classesParts[2].trim() : undefined
 	var outCommandClasses = outClusters && outClusters.length > 0 ? outClusters.split(', ') : []
-	var commandClasses = inCommandClasses.concat(outCommandClasses)*/
+	var commandClasses = inCommandClasses.concat(outCommandClasses)
 
 	var deviceData = {
 		id: devId,
@@ -516,6 +517,7 @@ function transformZwaveRow(row) {
 		type: type,
 		brand: brand,
 		deviceLink: deviceLink,
+		hubDeviceId: hubDeviceId,
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routers.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` -> \${v}`, "") + (routers[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + devId : devId2}`) ,
 		deviceStatus: childrenData[2].firstChild.data.trim(),
