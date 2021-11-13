@@ -483,7 +483,7 @@ function transformZwaveRow(row) {
 	if (childrenData[4].innerText.trim() != '') {
 		label = childrenData[4].innerText.trim()
 		deviceLink = childrenData[4].firstElementChild.getAttribute('href')
-		hubDeviceId = deviceLink.split('/')[2]
+		hubDeviceId = deviceLink.split('/')[3]
 	} else {
 		label = "<NO NAME>"
 	}
