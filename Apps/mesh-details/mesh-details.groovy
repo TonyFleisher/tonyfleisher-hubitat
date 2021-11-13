@@ -494,7 +494,7 @@ function transformZwaveRow(row) {
 		var brand = typeParts[1]
 	}
 	// Command Classes
-/*	No longer included in the zwave info */
+	// Older firnmware has this, newer doesn't
 	var commandClassesText = childrenData[3].innerText
 	const CC_REGEX = /in:(.*), out:(.*)/
 	var classesParts = commandClassesText.match(CC_REGEX)
@@ -751,6 +751,34 @@ async function getData() {
 	})
 
 	return tableContent
+}
+
+function getZwaveDeviceInfo(devId) {
+	const instance = axios.create({
+		timeout: 5000,
+		responseType: "stream"
+		});
+
+	return instance
+	.get('/device/edit/' + devId)
+	.then(response => {
+		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
+		var doc = new jQuery(response.data)
+		var deviceData = doc.find('#tableDeviceDetails li')
+		var inClusters
+		var outClusters
+		deviceData.each (
+			(index,row) => {
+				var kvp = row.innerText.split(":\\n")
+				if (kvp[0].trim() == "inClusters")
+					inClusters = kvp[1].trim()
+				else if (kvp[0].trim() == "outClusters")
+					outClusters = kvp[1].trim()
+			}
+		)
+		return {inClusters,outClusters}
+	})
+	//.catch(error => { console.error(error); } );
 }
 
 function findDeviceByDecId(devId) {
@@ -1269,7 +1297,7 @@ function doWork() {
 				updateLoading('','');
 			}).then(e => { 
 
-				\$('#mainTable tbody').on('click', 'td.details-control', function () {
+				\$('#mainTable tbody').on('click', 'td.details-control', async function () {
 						var tr = \$(this).closest('tr');
 						var row = tableHandle.row( tr );
 				
@@ -1278,9 +1306,23 @@ function doWork() {
 							tr.removeClass('shown');
 						}
 						else {
-							row.child(displayRowDetail(row)).show();
-							tr.addClass('shown');
+							var rowData = row.data()
+							if (rowData.commandClasses && rowData.commandClasses.length > 0) {
+								row.child(displayRowDetail(row)).show();
+								tr.addClass('shown');
+							}
+							else {
+								var classData = await getZwaveDeviceInfo(rowData.hubDeviceId)
+								var inClusters = classData.inClusters && classData.inClusters.length > 1 ? classData.inClusters.split(',') : []
+								var outClusters = classData.outClusters && classData.outClusters.length > 1 ? classData.outClusters.split(',') : []
+								var commandClasses = inClusters.concat(outClusters)
+								rowData.commandClasses = commandClasses
+								row.data(rowData)
+								row.child(displayRowDetail(row)).show();
+								tr.addClass('shown');
+							}
 						}
+						
 				} );
 				// Fix width issue
 				\$('input.dtsp-search').width('auto')
