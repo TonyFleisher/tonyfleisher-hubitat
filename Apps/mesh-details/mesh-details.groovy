@@ -105,7 +105,7 @@ def mainPage() {
 									if (!scriptLoaded) {\$.getScript('${getAppLink("script.js")}')};
 									scriptLoaded=true;
 									\$(document).ready( function() {
-										//console.log("ready");
+										// console.log("ready");
 										\$('#firstStatsScript').parent().hide()
 										var btn = \$("span:contains('Show Mesh Details')").parent()
 										var docURI = btn.attr('href')
@@ -880,7 +880,7 @@ async function getData() {
 var deviceDetailsMap = new Map()
 
 function getDeviceInfo(devId) {
-	console.log("Getting Device Detail for " + devId)
+	// console.log("Getting Device Detail for " + devId)
 	if (deviceDetailsMap.has(devId)) {
 		// console.log("Returning details for " + devId + " from cache")
 		return Promise.resolve(deviceDetailsMap.get(devId))
@@ -988,7 +988,7 @@ function displayRowDetail(row) {
 		var outClusters = detailData.outClusters && detailData.outClusters.length > 1 ? detailData.outClusters.split(',') : []
 		var commandClasses = inClusters.concat(outClusters)
 		// Update data
-		console.log("Command classes is: " + commandClasses)
+		//console.log("Command classes is: " + commandClasses)
 		data.commandClasses = commandClasses
 		row.data(data)
 	}
@@ -1126,7 +1126,7 @@ function zwaveNodeRepair(zwaveNodeId) {
 		url: "/hub/zwaveNodeRepair2?zwaveNodeId="+zwaveNodeId,
 		type: "GET",
 		success: function (data) {
-			console.log(data)
+			//console.log(data)
 				repairUpdateInterval = setInterval(checkZwaveRepairStatus, 3000)
 				\$("#zwave-repair-status").html('')
 				if (zwaveRepairStatus.showModal) {
@@ -1145,7 +1145,7 @@ function checkZwaveRepairStatus(){
 		type: "GET",
 		dataType: 'JSON',
 		success: function (data) {
-			console.log(data.stage)
+			// console.log(data.stage)
 			\$("#zwave-repair-status").html(data.html)
 			if(data.stage === "IDLE"){
 				\$("#close-zwave-repair").attr("disabled", false)
@@ -1286,9 +1286,9 @@ function doWork() {
 
 				// Setup State handler
 				\$('#mainTable').on('requestChild.dt', async function(e, row) {
-					console.log(`Restoring child for row`)
-					console.log(row)
-					console.log(e)
+					// console.log(`Restoring child for row`)
+					// console.log(row)
+					// console.log(e)
 					var content = await displayRowDetail(row)
 					row.child(content).show();
 				} );
