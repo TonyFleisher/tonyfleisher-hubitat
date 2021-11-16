@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.3.20-beta" }
-private appVerDate() { return "2021-02-21" }
+private releaseVer() { return "0.4.21-beta" }
+private appVerDate() { return "2021-11-16" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -41,6 +41,7 @@ preferences {
 mappings {
 	path("/meshinfo") { action: [GET: "meshInfo"] }
 	path("/script.js") { action: [GET: "scriptController"] }
+	path("/remoteLog") { action: [POST: "remoteLog"]}
 }
 
 def mainPage() {
@@ -50,7 +51,7 @@ def mainPage() {
 			resetAppSettings()
 		}
 		// Don't need hostoverride anymore
-		if (resetHost || hostOverride) {			
+		if (resetHost || hostOverride) {
 			resetHostOverride()
 		}
 
@@ -61,7 +62,7 @@ def mainPage() {
 
 		if(settings?.linkStyle && !state?.hasInitializedCols) {
 			if (enableDebug) log.debug "Resetting default column options"
-			app.updateSetting("addCols", ["status","security","rttStdDev","lwrRssi"])
+			app.updateSetting("addCols", ["status","security","rttStdDev","lwrRssi","deviceType"])
 			state.hasInitializedCols = true
 		}
 
@@ -89,19 +90,19 @@ def mainPage() {
 					String meshInfoLink = getAppLink("meshinfo")
 
 					if(settings?.linkStyle) {
-						input "addCols", "enum", title: "Select additional columns to display", multiple: true, options: ["status": "Status","security":"Security Mode","rttStdDev":"RTT Std Dev","lwrRssi":"LWR RSSI"], submitOnChange: true
+						input "addCols", "enum", title: "Select additional columns to display", multiple: true, options: ["status": "Status","security":"Security Mode","rttStdDev":"RTT Std Dev","lwrRssi":"LWR RSSI", "deviceType": "Device Type", "deviceManufacturer": "Device Manufacturer"], submitOnChange: true
 
 						if (settings?.linkStyle == 'embedded' && !settings?.embedStyle) {
 							paragraph title: "Select Embed Style", "Please Select a Embed style to proceed"
 						} else {
 
 							if (settings?.linkStyle == 'external' || settings?.embedStyle == 'fullscreen') {
-							href "", title: "Mesh Details", url: meshInfoLink, style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
+								href "", title: "Mesh Details", url: meshInfoLink, style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
 							} else { // Inline
 								paragraph title: "script", """
 									<script id="firstStatsScript">
-									var scriptLoaded; 
-									if (!scriptLoaded) {\$.getScript('${getAppLink("script.js")}')}; 
+									var scriptLoaded;
+									if (!scriptLoaded) {\$.getScript('${getAppLink("script.js")}')};
 									scriptLoaded=true;
 									\$(document).ready( function() {
 										//console.log("ready");
@@ -109,7 +110,7 @@ def mainPage() {
 										var btn = \$("span:contains('Show Mesh Details')").parent()
 										var docURI = btn.attr('href')
 										btn.removeAttr('href')
-										btn.click(function() {  
+										btn.click(function() { 
 											loadScripts().then( r => loadApp(docURI).then(d => doWork()))
 										})
 									})
@@ -122,12 +123,12 @@ def mainPage() {
 					}
 				}
 				section("Advanced", hideable: true, hidden: true) {
-					
+					input "stateSave", "bool", title: "Save Table State", defaultValue: false, submitOnChange: true
 					input "enableDebug", "bool", title: "Enable debug logs", defaultValue: false, submitOnChange: false
 					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
 					input "nodeBase", "enum", title: "Display nodes as hex or base10?", multiple: false, options: ["base16": "base16 (default)", "base10":"base10"], submitOnChange: true
-                   
-					paragraph "<hr/>"			
+
+					paragraph "<hr/>"
 
 					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
 				}
@@ -140,6 +141,21 @@ def mainPage() {
 	}
 }
 
+def remoteLog() {
+	def data = request.JSON
+	if (data.level == "debug") {
+		log.debug(data.log)
+	}
+	else if (data.level == "info") {
+		log.info(data.log)
+	}
+	else if (data.level == "error") {
+		log.error(data.log)
+	} else {
+		log.error("Received bad message for logging")
+	}
+}
+
 def resetAppSettings() {
 	resetHostOverride()
 	app.removeSetting("deviceLinks")
@@ -149,6 +165,7 @@ def resetAppSettings() {
 	app.removeSetting("enableDebug")
 	app.removeSetting('embedStyle')
 	app.removeSetting("addCols")
+	app.removeSetting("stateSave")
 	state.remove('hasInitializedCols')
 }
 
@@ -164,10 +181,10 @@ def meshInfo() {
 <head>
 <title>Hubitat Z-Wave Mesh Details</title>
 <link rel="stylesheet" type="text/css" href="/ui2/css/styles.min.css">
-<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.3/css/jquery.dataTables.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/searchpanes/1.1.1/css/searchPanes.dataTables.min.css">
 <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css">
-<!--  
+<!-- 
 <script src="jquery-3.5.1.min.js"></script>
 -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
@@ -221,7 +238,7 @@ dialog:not([open]) {
 	overflow: auto
 }
 
-.dtsp-searchButtonCont,.dtsp-buttonGroup {
+.dtsp-buttonGroup {
 	display: none !important;
 }
 
@@ -338,6 +355,7 @@ const CMD_CLASS_Names = {
 		0x75: "Protection",
 		0x76: "Lock (deprecated)",
 		0x77: "Node Naming and Location",
+		0x79: "Sound Switch",
 		0x7A: "Firmware Update Meta Data",
 		0x7B: "Grouping Name (deprecated)",
 		0x7C: "Remote Association Activation (obsoleted)",
@@ -380,7 +398,7 @@ function loadScripts() {
 		//console.log("axios loaded")
 	});
 	
-	var s2 = \$.getScript('https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js')
+	var s2 = \$.getScript('https://cdn.datatables.net/1.11.3/js/jquery.dataTables.min.js')
 	.then(s => \$.getScript('https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js'))
 	.then(s => \$.getScript('https://cdn.datatables.net/searchpanes/1.1.1/js/dataTables.searchPanes.min.js'))
 	.then(s => {
@@ -390,8 +408,8 @@ function loadScripts() {
 			var token1b = b.split('-',2)[0].trim()
 			var vala = parseInt(token1a)
 			var valb = parseInt(token1b)
-			if (!vala) return 1;
-			if (!valb) return -1;
+			if (!vala && vala !== 0) return 1;
+			if (!valb && vala !== 0) return -1;
 			return vala < valb ? -1 : 1			
 		}
 		jQuery.extend( jQuery.fn.dataTableExt.oSort, {
@@ -411,7 +429,7 @@ function loadScripts() {
 function getZwaveList() {
 	const instance = axios.create({
 		timeout: 5000,
-		responseType: "document"
+		responseType: "text" // iOS seems to fail (reason unknown) with document here
 		});
 
 	return instance
@@ -428,7 +446,11 @@ function getZwaveList() {
 		)
 		return results
 	})
-	.catch(error => { console.error(error); updateLoading("Error", error);} );
+	.catch(error => { 
+		console.error(error);
+		updateLoading("Error", error);
+		hubLog("error", `zwaveInfo: Error getting zwave Info: \${error}`)
+	} );
 }
 
 function getZwaveNodeDetail() {
@@ -443,7 +465,20 @@ function getZwaveNodeDetail() {
 
 		return response
 	})
-	.catch(error => { console.error(error); updateLoading("Error", error);} );
+	.catch(error => { 
+		console.error(error);
+		updateLoading("Error", error);
+		hubLog("error", `zwaveNodeDetail: Error getting zwave details: \${error}`)
+	} );
+}
+
+function hubLog(level,log) {
+	const instance = axios.create({
+		timeout: 5000
+	});
+
+	return instance
+	.post("${getAppLink("remoteLog")}", { level: level, log: log})
 }
 
 function transformZwaveRow(row) {
@@ -483,21 +518,33 @@ function transformZwaveRow(row) {
 	if (childrenData[4].innerText.trim() != '') {
 		label = childrenData[4].innerText.trim()
 		deviceLink = childrenData[4].firstElementChild.getAttribute('href')
+		hubDeviceId = deviceLink.split('/')[3]
 	} else {
 		label = "<NO NAME>"
 	}
 
+	var typeParts = childrenData[3].innerHTML.split("<br>")
+	if (typeParts && typeParts.length >= 2) {
+		var type = translateDeviceType(typeParts[0])
+		var manufacturer = typeParts[1]
+	}
+
 	// Command Classes
+	var commandClasses = null
+	var inCommandClasses = []
+
 	var commandClassesText = childrenData[3].innerText
 	const CC_REGEX = /in:(.*), out:(.*)/
 	var classesParts = commandClassesText.match(CC_REGEX)
 
-	var inClusters = classesParts && classesParts.length > 1 ? classesParts[1].trim() : undefined
-	var inCommandClasses = inClusters && inClusters.length > 0 ? inClusters.split(', ') : []
+	if (classesParts != null) {
+		var inClusters = classesParts && classesParts.length > 1 ? classesParts[1].trim() : undefined
+		inCommandClasses = inClusters && inClusters.length > 0 ? inClusters.split(', ') : []
 
-	var outClusters = classesParts && classesParts.length > 2 ? classesParts[2].trim() : undefined
-	var outCommandClasses = outClusters && outClusters.length > 0 ? outClusters.split(', ') : []
-	var commandClasses = inCommandClasses.concat(outCommandClasses)
+		var outClusters = classesParts && classesParts.length > 2 ? classesParts[2].trim() : undefined
+		var outCommandClasses = outClusters && outClusters.length > 0 ? outClusters.split(', ') : []
+		commandClasses = inCommandClasses.concat(outCommandClasses)
+	}
 
 	var deviceData = {
 		id: devId,
@@ -507,7 +554,10 @@ function transformZwaveRow(row) {
 		metrics: statMap,
 		routers: routers,
 		label: label,
+		type: type,
+		manufacturer: manufacturer,
 		deviceLink: deviceLink,
+		hubDeviceId: hubDeviceId,
 		deviceSecurity: childrenData[5].innerText.trim(),
 		routeHtml: routers.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` -> \${v}`, "") + (routers[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + devId : devId2}`) ,
 		deviceStatus: childrenData[2].firstChild.data.trim(),
@@ -517,6 +567,269 @@ function transformZwaveRow(row) {
 		isSleepyDevice: inCommandClasses.length > 0 && inCommandClasses.includes('0x84')
 	}
 	return deviceData
+}
+
+function translateDeviceType(deviceType) {
+	switch (deviceType) {
+		case "BASIC_TYPE_CONTROLLER": // 0x00
+			return "Basic Controler"
+		case "BASIC_TYPE_STATIC_CONTROLLER": // 0x03
+			return "Basic Static Controller"
+		case "BASIC_TYPE_SLAVE": // 0x03
+			return "Basic Slave"
+		case "BASIC_TYPE_ROUTING_SLAVE": // 0x04
+			return "Basic Routing Slave"
+
+		case "GENERIC_TYPE_AV_CONTROL_POINT": // 0x03
+			return "AV Control"
+		case "SPECIFIC_TYPE_DOORBELL":
+			return "Doorbell"
+		case "SPECIFIC_TYPE_SATELLITE_RECEIVER":
+			return "Satellite Receiver"
+		case "SPECIFIC_TYPE_SATELLITE_RECEIVER_V2":
+			return "Satellite Receiver V2"
+		case "SPECIFIC_TYPE_SOUND_SWITCH":
+			return "Sound Switch"
+
+		case "GENERIC_TYPE_DISPLAY": // 0x04
+			return "Display"
+		case "SPECIFIC_TYPE_SIMPLE_DISPLAY":
+			return "Simple Display"
+
+		case "GENERIC_TYPE_ENTRY_CONTROL": // 0x40
+			return "Entry Control"
+		case "SPECIFIC_TYPE_DOOR_LOCK":
+			return "Door Lock"
+		case "SPECIFIC_TYPE_ADVANCED_DOOR_LOCK":
+			return "Advanced Door Lock"
+		case "SPECIFIC_TYPE_SECURE_KEYPAD_DOOR_LOCK":
+			return "Secure Keypad Door Lock"
+		case "SPECIFIC_TYPE_SECURE_KEYPAD_DOOR_LOCK_DEADBOLT":
+			return "Door Lock Keypad Deadbolt"
+		case "SPECIFIC_TYPE_SECURE_DOOR":
+			return "Secure Door"
+		case "SPECIFIC_TYPE_SECURE_GATE":
+			return "Secure Gate"
+		case "SPECIFIC_TYPE_SECURE_BARRIER_ADDON":
+			return "Secure Barrier Addon"
+		case "SPECIFIC_TYPE_SECURE_BARRIER_OPEN_ONLY":
+			return "Secure Barrier Open Only"
+		case "SPECIFIC_TYPE_SECURE_BARRIER_CLOSE_ONLY":
+			return "Secure Barrier Close Only"
+		case "SPECIFIC_TYPE_SECURE_LOCKBOX":
+			return "Secure Lockbox"
+		case "SPECIFIC_TYPE_SECURE_KEYPAD":
+			return "Secure Keypad"
+
+		case "GENERIC_TYPE_GENERIC_CONTROLLER": // 0x01
+			return "Generic Controller"
+		case "SPECIFIC_TYPE_PORTABLE_REMOTE_CONTROLLER":
+			return "Portable Remote Controller"
+		case "SPECIFIC_TYPE_PORTABLE_SCENE_CONTROLLER":
+			return "Portable Scene Controller"
+		case "SPECIFIC_TYPE_PORTABLE_INSTALLER_TOOL":
+			return "Portable Installer Tool"
+		case "SPECIFIC_TYPE_REMOTE_CONTROL_AV":
+			return "Remote Control AV"
+		case "SPECIFIC_TYPE_REMOTE_CONTROL_SIMPLE":
+			return "Remote Control Simple"
+
+		case "GENERIC_TYPE_METER": // 0x31
+			return "Generic Meter"
+		case "SPECIFIC_TYPE_SIMPLE_METER":
+			return "Simple Meter"
+		case "SPECIFIC_TYPE_ADV_ENERGY_CONTROL":
+			return "Adv Energy Control"
+		case "SPECIFIC_TYPE_WHOLE_HOME_METER_SIMPLE":
+			return "Whole Home Meter Simple"
+
+		case "GENERIC_TYPE_METER_PULSE": // 0x30
+			return "Generic Meter Pulse"
+
+		case "GENERIC_TYPE_REPEATER_SLAVE": //0x0F
+			return "Repeater Slave"
+		case "SPECIFIC_TYPE_REPEATER_SLAVE":
+			return "Repeater Slave"
+		case "SPECIFIC_TYPE_VIRTUAL_NODE":
+			return "Virtual Node"
+
+		case "GENERIC_TYPE_SECURITY_PANEL": // 0x17
+			return "Security Panel"
+		case "SPECIFIC_TYPE_ZONED_SECURITY_PANEL":
+			return "Zoned Security Panel"
+
+		case "GENERIC_TYPE_SEMI_INTEROPERABLE": // 0x50
+			return "Semi Interoperable"
+		case "SPECIFIC_TYPE_ENERGY_PRODUCTION":
+			return "Energy Production"
+
+		case "GENERIC_TYPE_SENSOR_ALARM": // 0xA1
+			return "Alarm Sensor"
+		case "SPECIFIC_TYPE_ADV_ZENSOR_NET_ALARM_SENSOR":
+			return "Adv Zensor Net Alarm Sensor"
+		case "SPECIFIC_TYPE_ADV_ZENSOR_NET_SMOKE_SENSOR":
+			return "Adv Zensor Net Smoke Sensor"
+		case "SPECIFIC_TYPE_BASIC_ROUTING_ALARM_SENSOR":
+			return "Basic Routing Alarm Sensor"
+		case "SPECIFIC_TYPE_BASIC_ROUTING_SMOKE_SENSOR":
+			return "Basic Routing Smoke Sensor"
+		case "SPECIFIC_TYPE_BASIC_ZENSOR_NET_ALARM_SENSOR":
+			return "Basic Zensor Net Alarm Sensor"
+		case "SPECIFIC_TYPE_BASIC_ZENSOR_NET_SMOKE_SENSOR":
+			return "Basic Zensor Net Smoke Sensor"
+		case "SPECIFIC_TYPE_ROUTING_ALARM_SENSOR":
+			return "Routing Alarm Sensor"
+		case "SPECIFIC_TYPE_ROUTING_SMOKE_SENSOR":
+			return "Routing Smoke Sensor"
+		case "SPECIFIC_TYPE_ZENSOR_NET_ALARM_SENSOR":
+			return "Zensor Net Alarm Sensor"
+		case "SPECIFIC_TYPE_ZENSOR_NET_SMOKE_SENSOR":
+			return "Zensor Net Smoke Sensor"
+		case "SPECIFIC_TYPE_ALARM_SENSOR":
+			return "Alarm Sensor"
+
+		case "GENERIC_TYPE_SENSOR_BINARY": // 0x20
+			return "Binary Sensor"
+		case "SPECIFIC_TYPE_ROUTING_SENSOR_BINARY":
+			return "Routing Sensor Binary"
+
+		case "GENERIC_TYPE_SENSOR_MULTILEVEL": // 0x21
+			return "Sensor Multilevel"
+		case "SPECIFIC_TYPE_ROUTING_SENSOR_MULTILEVEL":
+			return "Routing Sensor Multilevel"
+		case "SPECIFIC_TYPE_CHIMNEY_FAN":
+			return "Chimney Fan"
+		
+		case "GENERIC_TYPE_STATIC_CONTROLLER": // 0x02
+			return "Static Controller"
+		case "SPECIFIC_TYPE_PC_CONTROLLER":
+			return "Pc Controller"
+		case "SPECIFIC_TYPE_SCENE_CONTROLLER":
+			return "Scene Controller"
+		case "SPECIFIC_TYPE_STATIC_INSTALLER_TOOL":
+			return "Static Installer Tool"
+		case "SPECIFIC_TYPE_SET_TOP_BOX":
+			return "Set Top Box"
+		case "SPECIFIC_TYPE_SUB_SYSTEM_CONTROLLER":
+			return "Sub System Controller"
+		case "SPECIFIC_TYPE_TV":
+			return "TV"
+		case "SPECIFIC_TYPE_GATEWAY":
+			return "Gateway"
+
+		case "GENERIC_TYPE_SWITCH_BINARY": // 0x10
+			return "Switch Binary"
+		case "SPECIFIC_TYPE_POWER_SWITCH_BINARY":
+			return "Power Switch Binary"
+		case "SPECIFIC_TYPE_SCENE_SWITCH_BINARY":
+			return "Scene Switch Binary"
+		case "SPECIFIC_TYPE_POWER_STRIP":
+			return "Power Strip"
+		case "SPECIFIC_TYPE_SIREN":
+			return "Siren"
+		case "SPECIFIC_TYPE_VALVE_OPEN_CLOSE":
+			return "Valve Open/Close"
+		case "SPECIFIC_TYPE_COLOR_TUNABLE_BINARY":
+			return "Binary Tunable Color Light"
+		case "SPECIFIC_TYPE_IRRIGATION_CONTROLLER":
+			return "Irrigation Controller"
+
+		case "GENERIC_TYPE_SWITCH_MULTILEVEL": // 0x11
+			return "Switch Multilevel"
+		case "SPECIFIC_TYPE_CLASS_A_MOTOR_CONTROL":
+			return "Class A Motor Control"
+		case "SPECIFIC_TYPE_CLASS_B_MOTOR_CONTROL":
+			return "Class B Motor Control"
+		case "SPECIFIC_TYPE_CLASS_C_MOTOR_CONTROL":
+			return "Class C Motor Control"
+		case "SPECIFIC_TYPE_MOTOR_MULTIPOSITION":
+			return "Motor Multiposition"
+		case "SPECIFIC_TYPE_POWER_SWITCH_MULTILEVEL":
+			return "Power Switch Multilevel"
+		case "SPECIFIC_TYPE_SCENE_SWITCH_MULTILEVEL":
+			return "Scene Switch Multilevel"
+		case "SPECIFIC_TYPE_FAN_SWITCH":
+			return "Fan Switch"
+		case "SPECIFIC_TYPE_COLOR_TUNABLE_MULTILEVEL":
+			return "Multilevel Tunable Color Light"
+
+		case "GENERIC_TYPE_SWITCH_REMOTE": // 0x12
+			return "Switch Remote"
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_BINARY":
+			return "Switch Remote Binary"
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_MULTILEVEL":
+			return "Switch Remote Multilevel"
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_TOGGLE_BINARY":
+			return "Switch Remote Toggle Binary"
+		case "SPECIFIC_TYPE_SWITCH_REMOTE_TOGGLE_MULTILEVEL":
+			return "Switch Remote Toggle Multilevel"
+
+		case "GENERIC_TYPE_SWITCH_TOGGLE": // 0x13
+			return "Switch Toggle"
+		case "SPECIFIC_TYPE_SWITCH_TOGGLE_BINARY":
+			return "Switch Toggle Binary"
+		case "SPECIFIC_TYPE_SWITCH_TOGGLE_MULTILEVEL":
+			return "Switch Toggle Multilevel"
+
+		case "GENERIC_TYPE_THERMOSTAT": // 0x08
+			return "Thermostat"
+		case "SPECIFIC_TYPE_SETBACK_SCHEDULE_THERMOSTAT":
+			return "Setback Schedule Thermostat"
+		case "SPECIFIC_TYPE_SETBACK_THERMOSTAT":
+			return "Setback Thermostat"
+		case "SPECIFIC_TYPE_SETPOINT_THERMOSTAT":
+			return "Setpoint Thermostat"
+		case "SPECIFIC_TYPE_THERMOSTAT_GENERAL":
+			return "Thermostat General"
+		case "SPECIFIC_TYPE_THERMOSTAT_GENERAL_V2":
+			return "Thermostat General V2"
+		case "SPECIFIC_TYPE_THERMOSTAT_HEATING":
+			return "Thermostat Heating"
+
+		case "GENERIC_TYPE_VENTILATION": // 0x16
+			return "Ventilation"
+		case "SPECIFIC_TYPE_RESIDENTIAL_HRV":
+			return "Residential Hrv"
+
+		case "GENERIC_TYPE_WINDOW_COVERING": // 0x09
+			return "Window Covering"
+		case "SPECIFIC_TYPE_SIMPLE_WINDOW_COVERING":
+			return "Simple Window Covering"
+
+		case "GENERIC_TYPE_ZIP_NODE": // 0x15
+			return "Zip Node"
+		case "SPECIFIC_TYPE_ZIP_ADV_NODE":
+			return "Zip Adv Node"
+		case "SPECIFIC_TYPE_ZIP_TUN_NODE":
+			return "Zip Tun Node"
+
+		case "GENERIC_TYPE_WALL_CONTROLLER": // 0x18
+			return "Wall Controller"
+		case "SPECIFIC_TYPE_BASIC_WALL_CONTROLLER":
+			return "Basic Wall Controller"
+
+		case "GENERIC_TYPE_NETWORK_EXTENDER": // 0x05
+			return "Network Extender"
+		case "SPECIFIC_TYPE_SECURE_EXTENDER":
+			return "Secure Extender"
+
+		case "GENERIC_TYPE_APPLIANCE": // 0x06
+			return "Applicance"
+		case "SPECIFIC_TYPE_GENERAL_APPLIANCE":
+			return "General Appliance"
+		case "SPECIFIC_TYPE_KITCHEN_APPLIANCE":
+			return "Kitchen Appliance"
+		case "SPECIFIC_TYPE_LAUNDRY_APPLIANCE":
+			return "Laundry Appliance"
+
+		case "GENERIC_TYPE_SENSOR_NOTIFICATION": // 0x07
+			return "Notification Sensor"
+		case "SPECIFIC_TYPE_NOTIFICATION_SENSOR":
+			return "Notification Sensor"
+
+		default:
+			return deviceType
+	}
 }
 
 function updateLoading(msg1, msg2) {
@@ -534,7 +847,7 @@ async function getData() {
 
 	// Pseudo entry for direct-connected devices
 	fullNameMap.DIRECT = 'DIRECT'
-	
+
 	updateLoading('Loading.','Getting device detail');
 	var nodeDetails = await getZwaveNodeDetail()
 
@@ -564,6 +877,43 @@ async function getData() {
 	return tableContent
 }
 
+var deviceDetailsMap = new Map()
+
+function getDeviceInfo(devId) {
+	console.log("Getting Device Detail for " + devId)
+	if (deviceDetailsMap.has(devId)) {
+		// console.log("Returning details for " + devId + " from cache")
+		return Promise.resolve(deviceDetailsMap.get(devId))
+	}
+	const instance = axios.create({
+		timeout: 5000,
+		responseType: "text" // iOS seems to fail (reason unknown) with document here
+		});
+	return instance
+	.get('/device/edit/' + devId)
+	.then(response => {
+		var doc = new jQuery(response.data)
+		var deviceData = doc.find('#tableDeviceDetails li')
+		var inClusters
+		var outClusters
+		deviceData.each (
+			(index,row) => {
+				var kvp = row.innerText.split(":\\n")
+				if (kvp[0].trim() == "inClusters")
+					inClusters = kvp[1].trim()
+				else if (kvp[0].trim() == "outClusters")
+					outClusters = kvp[1].trim()
+			}
+		)
+		var details = {inClusters,outClusters}
+		deviceDetailsMap.set(devId, details)
+		return details
+	})
+	.catch(error => { console.error(error); 
+		hubLog("error", `Error getting device detail: \${error}`)
+	} );
+}
+
 function findDeviceByDecId(devId) {
 	return tableContent.find( row => row.id2 == devId)
 }
@@ -573,10 +923,10 @@ function findDeviceByHexId(devId) {
 }
 
 function decodeSpeed(val) {
-	return val == (undefined || '') ? 'unknown' 
-		: val == '01' ? '9.6 kbps' 
-		: val == '02' ? '40 kbps' 
-		: val == '03' ? '100 kbps' 
+	return val == (undefined || '') ? 'unknown'
+		: val == '01' ? '9.6 kbps'
+		: val == '02' ? '40 kbps'
+		: val == '03' ? '100 kbps'
 		: 'UNKNOWN'
 }
 
@@ -631,6 +981,18 @@ function displayRowDetail(row) {
 	var deviceData = tableContent.find( row => row.id == devId)
 	var data = row.data()
 
+  return getDeviceInfo(data.hubDeviceId).then(detailData => {
+	// On demand data
+	if (!data.commandClasses) {
+		var inClusters = detailData.inClusters && detailData.inClusters.length > 1 ? detailData.inClusters.split(',') : []
+		var outClusters = detailData.outClusters && detailData.outClusters.length > 1 ? detailData.outClusters.split(',') : []
+		var commandClasses = inClusters.concat(outClusters)
+		// Update data
+		console.log("Command classes is: " + commandClasses)
+		data.commandClasses = commandClasses
+		row.data(data)
+	}
+
 	var html = '<div><table>'
 
 	// Header Row
@@ -652,43 +1014,65 @@ function displayRowDetail(row) {
 	html += '</td>'
 
 	html += '<td style="vertical-align: top;">'
-	var neighborMap = neighborsMap.get(deviceData.id2.toString())
-	if (neighborMap && neighborMap.length > 0) {
-		neighborMap.forEach( (devId) => {
-			if (devId < 6) { 
+	html += '<td style="vertical-align: top;">'
+	var neighborListStyle = "list-style-type:none;margin:0;padding:0"
+	var neighborList = neighborsMap.get(deviceData.id2.toString())
+	var neighborOfList = neighborsMapReverse.get(deviceData.id2.toString())
+	if (neighborList && neighborList.length > 0) {
+		html += `<ul style="\${neighborListStyle}">`
+		neighborList.forEach( (neighborId) => {
+			var symetry = false
+			if (neighborOfList && neighborOfList.includes(neighborId)) {
+				symetry = true
+			}
+			var color
+			if (!symetry) { color = "orange"}
+			html += `<li \${color ? `style="color:\${color}"` : ""}>`
+			if (neighborId < 6) {
 				html += useHex() ? '0x' : ''
-				html += `\${devId} - HUB`
+				html += `\${neighborId} - HUB`
 			} else {
-				var deviceData = findDeviceByDecId(devId)
+				var deviceData = findDeviceByDecId(neighborId)
 				html += useHex() ? `0x\${deviceData.id}` : deviceData.id2
 				html += ` - \${deviceData.label}`
 				if (nonRepeaters.has(deviceData.id2.toString())) {
 					html += '<sup style="vertical-align:text-top;">*</sup>'
 				}
+				// TODO: If neighborId is a router
 			}
-			html += '<br/>'
+			html += '</li>'
 		})
+		html += '</ul>'
 	}
 	html += '</td>'
 
 	html += '<td style="vertical-align: top;">'
-	var neighborOfMap = neighborsMapReverse.get(deviceData.id2.toString())
-	if (neighborOfMap && neighborOfMap.length > 0) {
-		neighborOfMap.forEach( (devId) => {
-			if (devId < 6) { 
+	if (neighborOfList && neighborOfList.length > 0) {
+		html += `<ul style="\${neighborListStyle}">`
+		neighborOfList.forEach( (neighborId) => {
+			var symetry = false
+			if (neighborList && neighborList.includes(neighborId)) {
+				symetry = true
+			}
+			var color
+			if (!symetry) { color = "orange"}
+			html += `<li \${color ? `style="color:\${color}"` : ""}>`
+			if (neighborId < 6) {
 				html += useHex() ? '0x' : ''
-				html += `\${devId} - HUB`
+				html += `\${neighborId} - HUB`
 			} else {
-				var deviceData = findDeviceByDecId(devId)
+				var deviceData = findDeviceByDecId(neighborId)
 				html += useHex() ? `0x\${deviceData.id}` : deviceData.id2
 				html += ` - \${deviceData.label}`
 
 				if (nonRepeaters.has(deviceData.id2.toString())) {
 					html += '<sup style="vertical-align:text-top;">*</sup>'
 				}
+				// TODO: If deviceData.id is a router for neighborId
 			}
-			html += '<br/>'
+			html += '</li>'
 		})
+		html += '</ul>'
 	}
 	html += '</td>'
 
@@ -715,13 +1099,16 @@ function displayRowDetail(row) {
 		html += '</pre></div>'
 	}
 
-	html += `<button onclick="zwaveNodeRepair(\${data.id2})" class="btn btn-danger btn-nodeDetail">Repair</button>`
+	if (data.commandClasses && !data.commandClasses.includes('0x84')) {
+		html += `<button onclick="zwaveNodeRepair(\${data.id2})" class="btn btn-danger btn-nodeDetail">Repair</button>`
+	}
 	html += '</td>'
 
 	html += '</tr></table>'
 	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a slave (non-repeater)</p>'
 	html += '</div>'
 	return html
+  })
 
 }
 
@@ -890,17 +1277,29 @@ if ( "${settings?.embedStyle}" != 'inline') {
 }
 
 function doWork() {
-
-		loadScripts().then(function() {
+		return loadScripts().then(function() {
+			hubLog("info", "UserAgent: " + navigator.userAgent)
 			updateLoading('Loading..','Getting device data');
-			getData().then( r => {	
+			return getData().then( r => {
 				// console.log(list)
 				tableContent = r;
+				sendDebugData()
+
+				// Setup State handler
+				\$('#mainTable').on('requestChild.dt', async function(e, row) {
+					console.log(`Restoring child for row`)
+					console.log(row)
+					console.log(e)
+					var content = await displayRowDetail(row)
+					row.child(content).show();
+				} );
 
 				updateLoading('Loading..','Creating table');
 				var idCol = useHex() ? 'id' : 'id2';
 				tableHandle = \$('#mainTable').DataTable({
 					data: tableContent,
+					rowId: 'id2',
+					stateSave: ${settings?.stateSave},
 					order: [[1,'asc']],
 					columns: [
 						//{ data: 'networkType', title: 'Type', searchPanes: { preSelect:['ZWAVE','ZIGBEE']} },
@@ -921,13 +1320,13 @@ function doWork() {
 									return data
 								}
 								if (type === 'sort' || type === 'type') {
-									if (data == 'OK') 
+									if (data == 'OK')
 										return 0
 									else if (data == 'NOT_RESPONDING')
 										return 1
 									else if (data == 'FAILED')
 										return 2
-									else 
+									else
 										return `3\${data}`
 								}
 							},
@@ -950,6 +1349,14 @@ function doWork() {
 								}
 							}
 						},
+ 						{ data: 'type', title: 'Device Type', defaultContent: "!NO DEVICE!",
+							visible: ${settings?.addCols?.contains("deviceType")},
+							searchPanes: {controls: false}
+						 },
+						{ data: 'manufacturer', title: 'Manufacturer', defaultContent: "!NO DEVICE!",
+							visible: ${settings?.addCols?.contains("deviceManufacturer")},
+							searchPanes: {controls: false}
+						},
 						{ data: 'routersFull', title: 'Repeater', visible: false,
 							render: {'_':'[, ]', sp: '[]'},
 							defaultContent: "None",
@@ -966,7 +1373,7 @@ function doWork() {
 								} else if (type === 'sort' || type === 'type') {
 									return val
 								} else {
-									return val ? 
+									return val ?
 										`\${val} ms`
 										: 'unknown'
 								}
@@ -993,7 +1400,7 @@ function doWork() {
 								} else if (type === 'sort' || type === 'type') {
 									return val.toString() == 'NaN' ? -2 : val < 0 ? -1 : val
 								} else {
-									return val >= 0 ? 
+									return val >= 0 ?
 										`\${val} ms`
 										: "unknown"
 								}
@@ -1072,13 +1479,13 @@ function doWork() {
 					"searchPanes": {
 						layout: 'meshdetails-6',
 						cascadePanes: true,
-						order: ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev']
+						order: ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev', 'Device Type', 'Manufacturer']
 					}
 				});
 				updateLoading('','');
-			}).then(e => { 
+			}).then(e => {
 
-				\$('#mainTable tbody').on('click', 'td.details-control', function () {
+				\$('#mainTable tbody').on('click', 'td.details-control', async function () {
 						var tr = \$(this).closest('tr');
 						var row = tableHandle.row( tr );
 				
@@ -1087,7 +1494,8 @@ function doWork() {
 							tr.removeClass('shown');
 						}
 						else {
-							row.child(displayRowDetail(row)).show();
+							var content = await displayRowDetail(row)
+							row.child(content).show();
 							tr.addClass('shown');
 						}
 				} );
@@ -1099,6 +1507,23 @@ function doWork() {
 			
 		});
 };
+
+function sendDebugData() {
+	/* Globals:
+		deviceDetailsMap
+		neighborsMap
+		tableContent
+		tableHandle
+
+	*/
+	var message = `
+		# of Devices: \${tableContent.length}
+		# of Devices with details: \${tableContent.filter(x => x.detail != null).length}
+		Size of Neighbors Map (includes hub): \${neighborsMap.size}`
+	
+	if ($enableDebug)
+		hubLog("debug", message)
+}
 """
 	render contentType: "application/javascript", data: javaScript.replaceAll('\t','  ')
 	
@@ -1119,7 +1544,7 @@ def updated() {
 def initialize() {
 	log.info "Endpoint: ${getAppLink('meshinfo')}"
 }
- 
+
 def uninstalled() {
 	 log.warn("${app?.getLabel()} has been Uninstalled...")
 }
@@ -1131,7 +1556,7 @@ def getAccessToken() {
 			def accessToken = createAccessToken()
 			return accessToken
 		} else {
-			return state.accessToken 
+			return state.accessToken
 		}
 	}
 	catch (e) {
