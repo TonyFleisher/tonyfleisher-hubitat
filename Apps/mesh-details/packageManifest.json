@@ -21,7 +21,7 @@
       "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
     }
   ],
-  "version": "0.4.21-beta",
+  "version": "0.4.21.1-beta",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
   "releaseNotes": "v0.4.21-beta\n* Fix commandClasses (contributed by @dman2306)\n* Add deviceType and Manufacturer (contributed by @dman2306)\n* Mark neighbors orange if it is not symetrical (suggested by @dennypage)\n* Improve logging\n* Add ability to save state between page loads\n* Workaround issues with iOS (thanks @dennypage and @672southmain)\n"
 }

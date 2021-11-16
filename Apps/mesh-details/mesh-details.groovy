@@ -31,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.4.21-beta" }
+private releaseVer() { return "0.4.21.1-beta" }
 private appVerDate() { return "2021-11-16" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -1013,7 +1013,6 @@ function displayRowDetail(row) {
 	html += deviceData.routersFull.join('<br/>')
 	html += '</td>'
 
-	html += '<td style="vertical-align: top;">'
 	html += '<td style="vertical-align: top;">'
 	var neighborListStyle = "list-style-type:none;margin:0;padding:0"
 	var neighborList = neighborsMap.get(deviceData.id2.toString())
