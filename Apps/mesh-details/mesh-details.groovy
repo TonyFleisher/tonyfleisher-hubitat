@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.5.22-beta" }
-private appVerDate() { return "2022-01-02" }
+private releaseVer() { return "0.5.22.1-beta" }
+private appVerDate() { return "2022-01-03" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -332,7 +332,7 @@ def deviceDetails() {
 				inCC: inCCList,
 				inCCSec: inCCSecList,
 				zwavePlus: zwavePlus,
-				lastActiveTS: Date.parse("yyy-MM-dd HH:mm:ssZ","$lastActiveStr".replace("+00:00","+0000")).getTime()
+				lastActiveTS: lastActiveStr ? Date.parse("yyy-MM-dd HH:mm:ssZ","$lastActiveStr".replace("+00:00","+0000")).getTime() : null
 			])
 			r
 		}

@@ -21,7 +21,7 @@
       "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
     }
   ],
-  "version": "0.5.22-beta",
+  "version": "0.5.22.1-beta",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
   "releaseNotes": "v0.5.22-beta\n  * Add device authorization to access more device data for display/filtering:\n    * Listening devices\n    * Beaming devices\n    * FlIRS devices\n    * Z-Wave Plus devices\n  * Fix several display bugs\n  * Refactor scripts\n  * Update to new datatables script\n  * Add new \"RoutingFor Count\" column and \"Routing For\" list (based on suggestion from @lawsonad)\n"  
 }
