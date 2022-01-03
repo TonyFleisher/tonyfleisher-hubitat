@@ -2082,6 +2082,10 @@ String getAppLink(String path) {
 	return link
 }
 
+String getAppId() {
+	return app.getId()
+}
+
 String removeHostFromURL(String originalURL)
 {
 	URI uri = new URI(originalURL);

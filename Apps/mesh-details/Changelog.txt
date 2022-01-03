@@ -8,6 +8,7 @@ v0.5.22-beta
 * Refactor scripts
 * Update to new datatables script
 * Add new "RoutingFor Count" column and "Routing For" list (based on suggestion from @lawsonad)
+* Add tooltips to Topology map
 
 v0.4.21-beta
 Add ability to save state between page loads
