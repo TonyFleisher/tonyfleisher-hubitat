@@ -1,0 +1,53 @@
+v0.5.22-beta
+* Add device authorization to access more device data for display/filtering:
+  * Listening devices
+  * Beaming devices
+  * FlIRS devices
+  * Z-Wave Plus devices
+* Fix several display bugs
+* Refactor scripts
+* Update to new datatables script
+* Add new "RoutingFor Count" column and "Routing For" list (based on suggestion from @lawsonad)
+
+v0.4.21-beta
+Add ability to save state between page loads
+Add deviceType and Manufacturer (based on contribution by @dman2306)
+Mark neighbors orange if it is not symmetrical (suggested by @dennypage)
+Improve logging
+Fix commandClasses in child row (based on contribution by @dman2306 )
+Workaround issues with iOS (thanks @dennypage and @672southmain)
+
+v0.3.20-beta
+* Add repeaters detail to device details
+* Add Topology View, with (experimental) option to only show repeaters
+* Improve the formatting for route column
+* Add Advanced Option to allow changing from base16 to base10 for display (suggested by @dennypage)
+* Misc. style fixes and bug fixes
+
+v0.2.18-beta
+* Fix host issues (hopefully for the last time)
+* Add ability to show/hide some columns
+* Add option to display mesh details within the app screen
+
+v0.2.17-beta has been published
+Change log:
+
+Fix bugs
+Add reset hostOverride switch
+Enhancements to device details
+
+v0.1.16-beta
+
+Now available for install from HPM (please use HPM matchup so you can stay up to date)
+Add advanced options to App Settings
+deviceLinks?: Device names will link to device edit page on hub
+Host override: Allow you to change hostname in links (should fix issue reported by @jlv and @eppower)
+Refactor Neighbors list and add NeighborsOf (@dennypage: color will be added in a future release)
+Instead of coloring red, strikeout Status if not OK and device is not a repeater (idea from comment by @danabw in another thread)
+
+v0.1.11-beta
+
+Fix Issue #1 for error when zombie nodes are present (@jtmpush18 @eric.dalquist please let me know whether this fixed the errors you reported)
+Add Error Count column (requested by @Panda)
+Add Security status column (and filter, if applicable)
+Reorder some data
