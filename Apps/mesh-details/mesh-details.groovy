@@ -48,9 +48,40 @@ mappings {
 }
 
 def devicesPage() {
-	dynamicPage (name: "devicesPage", title: "", install: false, uninstall: false) {  
+	dynamicPage (name: "devicesPage", title: "", install: false, uninstall: false) {
+		if (!permitDeviceAccess) {
+			app.removeSetting("deviceList")
+			state.hasInitializedDeviceList = false
+		}
+		if (deviceList && !state?.hasInitializedDeviceList) {
+			state.hasInitializedDeviceList = true
+		}
+
 		section("") {
-			input "deviceList", "capability.*", multiple: true, submitOnChange: true
+			input "permitDeviceAccess", "bool", title: "Grant access to z-wave devices (experimental)", defaultValue: false, submitOnChange: true
+			if (permitDeviceAccess) {
+				if (!deviceList) {
+					input "addAllZwave", "bool", title: "Select ALL Z-Wave devices", defaultValue: false, submitOnChange: true
+					if (addAllZwave) {
+						paragraph title: "initDevicesScript", """
+										<script id="addDevices">
+										async function loadUtilScript() {
+												await \$.getScript('${getAppLink("zwaveUtils.js")}')
+										}
+										async function addAllZwaveDevices() {
+											await loadUtilScript()
+											var deviceIds = await getZWaveDeviceIds()
+											\$('#settings\\\\[deviceList\\\\]').val(deviceIds.join(","))
+											jsonSubmit(null,null,false)
+										}
+										\$(document).ready( async function() { await addAllZwaveDevices()})
+										</script>
+						"""
+						app.removeSetting("addAllZwave")
+					}
+				}
+				input "deviceList", "capability.*", multiple: true, submitOnChange: true
+			}
 		}
 	}
 }
@@ -108,10 +139,12 @@ def mainPage() {
 					String meshInfoLink = getAppLink("meshinfo")
 
 					if(settings?.linkStyle) {
-						getAddColsInput()
 						if (settings?.linkStyle == 'embedded' && !settings?.embedStyle) {
 							paragraph title: "Select Embed Style", "Please Select a Embed style to proceed"
 						} else {
+
+							getAddColsInput()
+							href "devicesPage", title: '<span style="color:green">NEW</span>&nbsp;Authorize Extended Device Data', description: "Authorize access to Z-Wave Device data"
 
 							if (settings?.linkStyle == 'external' || settings?.embedStyle == 'fullscreen') {
 								href "", title: "Mesh Details", url: meshInfoLink, style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
@@ -150,8 +183,6 @@ def mainPage() {
 				}
 				section("Advanced", hideable: true, hidden: true) {
 					input "stateSave", "bool", title: "Save Table State (experimental)", defaultValue: false, submitOnChange: true
-					paragraph "NOTE: Granting access will immediately add all z-wave devices on the hub to this app for advanced data collection"
-					input "permitDeviceAccess", "bool", title: "Grant access to z-wave devices (experimental)", defaultValue: false, submitOnChange: true
 
 					input "enableDebug", "bool", title: "Enable debug logs", defaultValue: false, submitOnChange: false
 					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
@@ -160,29 +191,6 @@ def mainPage() {
 					paragraph "<hr/>"
 
 					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
-				}
-				if (permitDeviceAccess && !settings.deviceList && !state.hasInitializedDeviceList) {
-					section() {
-						log.info("Initializing devicesList with z-wave devices")
-						paragraph title: "initDevicesScript", """
-										<script id="addDevices">
-										async function loadUtilScript() {
-												await \$.getScript('${getAppLink("zwaveUtils.js")}')
-										}
-										\$(document).ready( async function() {
-											//console.log("ready");
-											await loadUtilScript()
-											await refreshDevicesList()
-											jsonSubmit(null,null,false)
-										})
-										</script>
-						"""
-					}
-				}
-				if (permitDeviceAccess) {
-					section("Show authorized devices", hideable: true, hidden:true) {
-						paragraph getDeviceListHtml()
-					}
 				}
 			} else {
 				section("") {
@@ -206,12 +214,14 @@ private def getDeviceListHtml() {
 
 private def getAddColsInput() {
 	def colOptions = ["status": "Status","security":"Security Mode","rttStdDev":"RTT Std Dev","lwrRssi":"LWR RSSI", "deviceType": "Device Type", "deviceManufacturer": "Device Manufacturer", "routingCount": "RoutingFor Count"]
+	def inputDesc = "Select additional columns to display (authorize extended device data for more options)"
 	if (settings?.permitDeviceAccess) {
 		colOptions.put("lastActive", "Last Active Time")
 		colOptions.put("beaming", "Is Beaming?")
 		colOptions.put("listening", "Is Listening?")
+		colOptions.put("zwaveplus", "Is Z-Wave Plus?")
 	}
-	input "addCols", "enum", title: "Select additional columns to display", multiple: true, options: colOptions, submitOnChange: true
+	input "addCols", "enum", title: "Additional Columns", description: inputDesc,  multiple: true, options: colOptions, submitOnChange: true
 }
 
 def remoteLog() {
@@ -285,20 +295,20 @@ def deviceDetails() {
 				def rawBytes = EncodingGroovyMethods.decodeHex(zwaveBytes.join())
 				nifBytes = rawBytes.collect {it -> String.format("%8s", Integer.toBinaryString(it & 0xFF)).replace(" ", "0") }
 				def capHex = zwaveBytes[0]
-				listening = (Integer.parseInt(zwaveBytes[0], 16) & 0x80) ? true : false
-				routing = (Integer.parseInt(zwaveBytes[0], 16) & 0x40) ? true : false
+				listening = (Integer.parseInt(zwaveBytes[0], 16) & 0x80) ? "yes" : "no"
+				routing = (Integer.parseInt(zwaveBytes[0], 16) & 0x40) ? "yes" : "no"
 				flirs1000 = (Integer.parseInt(zwaveBytes[1], 16) & 0x40)
 				flirs250 = (Integer.parseInt(zwaveBytes[1], 16) & 0x20)
-				flirs = (flirs250 | flirs1000) ? true : false
-				beaming = (Integer.parseInt(zwaveBytes[1], 16) & 0x10) ? true : false
-				routingSlave = (Integer.parseInt(zwaveBytes[1], 16) & 0x08) ? true : false
+				flirs = (flirs250 | flirs1000) ? "yes" : "no"
+				beaming = (Integer.parseInt(zwaveBytes[1], 16) & 0x10) ? "yes" : "no"
+				routingSlave = (Integer.parseInt(zwaveBytes[1], 16) & 0x08) ? "yes" : "no"
 				speedBits = nifBytes[0].substring(2,5)
 				maxSpeed = Integer.parseInt(speedBits,2)
-				extraSpeed = (Integer.parseInt(zwaveBytes[2], 16) & 0x01) ? true : false
+				extraSpeed = (Integer.parseInt(zwaveBytes[2], 16) & 0x01) ? "yes" : "no"
 
 				inCCList = inCC ? inCC.split(',') : []
 				inCCSecList = inCCSec ? inCCSec.split(',') : []
-				zwavePlus = (inCCList.contains('0x5E')) ? true : false
+				zwavePlus = (inCCList.contains('0x5E')) ? "yes" : "no"
 			}
 			r.put(id, [
 				name: dev.getDisplayName(),
@@ -379,6 +389,17 @@ div.dtsp-meshdetails-6 {
 }
 div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
 	 flex-basis: 120px;
+}
+
+div.dtsp-panesContainer div.dtsp-searchPanes {
+	justify-content: flex-start
+}
+
+div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
+	font-size: medium
+}
+div.dtsp-topRow div.dtsp-subRow1 input {
+	font-size: medium
 }
 
 
@@ -499,15 +520,21 @@ function loadAxios() {
 	});
 }
 
+async function getZWaveDeviceIds() {
+	var devList = await getZwaveList()
+	if (!window.axios) {
+		await loadAxios()
+	}
+	console.log("Collecting zwave device ids")
+	var deviceIds = devList.reduce( (acc, val) => {
+		acc.push(val.hubDeviceId); return acc;
+	}, [])
+	console.log("DeviceIds: " + deviceIds.toString())
+	return deviceIds
+}
+
 async function refreshDevicesList() {
-		var devList = await getZwaveList()
-		if (!window.axios) {
-			await loadAxios()
-		}
-		console.log("Collecting zwave device ids")
-		var deviceIds = devList.reduce( (acc, val) => {
-			acc.push(val.hubDeviceId); return acc;
-		}, [])
+		var deviceIds = await getZWaveDeviceIds()
 		if ($enableDebug) {
 			console.log(deviceIds)
 		}
@@ -1326,15 +1353,15 @@ function buildNeighborsLists(fullnameMap, nodeData) {
 }
 
 
-function displayRowDetail(row) {
+async function displayRowDetail(row) {
 	var devId = row.id()
 	var neighborList = []
 	var deviceData = tableContent.find( row => row.id == devId)
 	var data = row.data()
 
-  return getDeviceInfo(data.hubDeviceId).then(detailData => {
 	// On demand data
 	if (!data.commandClasses) {
+		var detailData = await getDeviceInfo(data.hubDeviceId)
 		var inClusters = detailData.inClusters && detailData.inClusters.length > 1 ? detailData.inClusters.split(',') : []
 		var secureInClusters = detailData.secureInClusters && detailData.secureInClusters.length > 1 ? detailData.secureInClusters.split(',') : []
 		var commandClasses = inClusters.concat(secureInClusters)
@@ -1405,6 +1432,7 @@ function displayRowDetail(row) {
 		html += '</ul>'
 	}
 	html += '</td>'
+
 	// NeighborOf
 	html += '<td style="vertical-align: top;">'
 	if (neighborOfList && neighborOfList.length > 0) {
@@ -1469,8 +1497,6 @@ function displayRowDetail(row) {
 	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a non-repeater</p>'
 	html += '</div>'
 	return html
-  })
-
 }
 
 function showDetailDebug(btn) {
@@ -1521,7 +1547,6 @@ function checkZwaveRepairStatus(){
 		}
 	});
 }
-
 
 function labelTopologyHeads(sel, ttClass) {
 	sel.each( (i, data) => {
@@ -1658,6 +1683,7 @@ function loadApp(appURI) {
 	.then(response => {
 		var doc = new jQuery(response.data)
 
+		// Merge head from fetched content into current page
 		var h = doc.find('head').children()
 		\$('head').append(h)
 
@@ -1787,11 +1813,17 @@ function doWork() {
 						},
  						{ data: 'type', title: 'Device Type', defaultContent: "!NO DEVICE!",
 							visible: ${settings?.addCols?.contains("deviceType")},
-							searchPanes: {controls: false}
+							searchPanes: {
+								controls: false,
+								show: ${settings?.addCols?.contains("deviceType")} ? undefined : false
+							}
 						 },
 						{ data: 'manufacturer', title: 'Manufacturer', defaultContent: "!NO DEVICE!",
 							visible: ${settings?.addCols?.contains("deviceManufacturer")},
-							searchPanes: {controls: false}
+							searchPanes: {
+								controls: false,
+								show: ${settings?.addCols?.contains("deviceManufacturer")} ? undefined : false
+							}
 						},
 						{ data: 'routersFull', title: 'Repeater', visible: false,
 							render: {'_':'[, ]', sp: '[]'},
