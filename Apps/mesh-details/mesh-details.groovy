@@ -8,7 +8,7 @@
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+ http://www.apache.org/licenses/LICENSE-2.0
 
  Unless required by applicable law or agreed to in writing, software
  distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,17 +31,28 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.4.21.1-beta" }
-private appVerDate() { return "2021-11-16" }
+private releaseVer() { return "0.5.22-beta" }
+private appVerDate() { return "2022-01-02" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
+	page name: "devicesPage", nextPage: "mainPage"
 }
 
 mappings {
 	path("/meshinfo") { action: [GET: "meshInfo"] }
 	path("/script.js") { action: [GET: "scriptController"] }
+	path("/zwaveUtils.js") { action: [GET: "zwaveUtilsController"]}
+	path("/deviceDetails") { action: [GET: "deviceDetails"]}
 	path("/remoteLog") { action: [POST: "remoteLog"]}
+}
+
+def devicesPage() {
+	dynamicPage (name: "devicesPage", title: "", install: false, uninstall: false) {  
+		section("") {
+			input "deviceList", "capability.*", multiple: true, submitOnChange: true
+		}
+	}
 }
 
 def mainPage() {
@@ -53,6 +64,13 @@ def mainPage() {
 		// Don't need hostoverride anymore
 		if (resetHost || hostOverride) {
 			resetHostOverride()
+		}
+		if (!permitDeviceAccess) {
+			app.removeSetting("deviceList")
+			state.hasInitializedDeviceList = false
+		}
+		if (deviceList && !state?.hasInitializedDeviceList) {
+			state.hasInitializedDeviceList = true
 		}
 
 		if (embedStyle && settings?.linkStyle && settings?.linkStyle != 'embedded') {
@@ -74,24 +92,23 @@ def mainPage() {
 			label title: "App name"
 		}
 		if (!getAccessToken()) {
-            section("") {
-			    paragraph title: "Enable OAuth", "Please enable OAuth for this App (in Apps Code)"
-            }
-        } else {
+			section("") {
+				paragraph title: "Enable OAuth", "Please enable OAuth for this App (in Apps Code)"
+			}
+		} else {
 			if (app.getInstallationState() == 'COMPLETE') {
-				section("") {
+				section("Display Mode") {
 					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
 					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
 					if (settings?.linkStyle == 'embedded') {
-						input "embedStyle", "enum", title: "Embed Style", required: true, submitOnChange: true, options: ["inline": "Display in App screen (alpha feature)", "fullscreen": "Display fullscreen (<b>default</b>)"], defaultValue: "fullscreen"
+						input "embedStyle", "enum", title: "Embed Style", required: true, submitOnChange: true, options: ["inline": "Display in App screen (experimental; alpha feature)", "fullscreen": "Display fullscreen (<b>default</b>)"], defaultValue: "fullscreen"
 					}
 				}
 				section("") {
 					String meshInfoLink = getAppLink("meshinfo")
 
 					if(settings?.linkStyle) {
-						input "addCols", "enum", title: "Select additional columns to display", multiple: true, options: ["status": "Status","security":"Security Mode","rttStdDev":"RTT Std Dev","lwrRssi":"LWR RSSI", "deviceType": "Device Type", "deviceManufacturer": "Device Manufacturer"], submitOnChange: true
-
+						getAddColsInput()
 						if (settings?.linkStyle == 'embedded' && !settings?.embedStyle) {
 							paragraph title: "Select Embed Style", "Please Select a Embed style to proceed"
 						} else {
@@ -102,20 +119,29 @@ def mainPage() {
 								paragraph title: "script", """
 									<script id="firstStatsScript">
 									var scriptLoaded;
-									if (!scriptLoaded) {\$.getScript('${getAppLink("script.js")}')};
-									scriptLoaded=true;
+									async function loadMainScript() {
+										if (!scriptLoaded) {
+											await \$.getScript('${getAppLink("zwaveUtils.js")}')
+											await \$.getScript('${getAppLink("script.js")}')
+											scriptLoaded=true;
+										};
+									}
 									\$(document).ready( function() {
-										// console.log("ready");
+										//console.log("ready");
 										\$('#firstStatsScript').parent().hide()
 										var btn = \$("span:contains('Show Mesh Details')").parent()
 										var docURI = btn.attr('href')
 										btn.removeAttr('href')
-										btn.click(function() { 
-											loadScripts().then( r => loadApp(docURI).then(d => doWork()))
+										btn.click(async function() { 
+											await loadMainScript()
+											await loadScripts()
+											await loadAxios()
+											await loadApp(docURI)
+											await doWork()
 										})
 									})
 									</script>"""
-			                    href "", title: "Show Mesh Details", url: meshInfoLink, style: "embedded", required: false, description: "Tap Here to view the Mesh Details", image: ""
+								href "", title: "Show Mesh Details", url: meshInfoLink, style: "embedded", required: false, description: "Tap Here to view the Mesh Details", image: ""
 							}
 						}
 					} else {
@@ -123,7 +149,10 @@ def mainPage() {
 					}
 				}
 				section("Advanced", hideable: true, hidden: true) {
-					input "stateSave", "bool", title: "Save Table State", defaultValue: false, submitOnChange: true
+					input "stateSave", "bool", title: "Save Table State (experimental)", defaultValue: false, submitOnChange: true
+					paragraph "NOTE: Granting access will immediately add all z-wave devices on the hub to this app for advanced data collection"
+					input "permitDeviceAccess", "bool", title: "Grant access to z-wave devices (experimental)", defaultValue: false, submitOnChange: true
+
 					input "enableDebug", "bool", title: "Enable debug logs", defaultValue: false, submitOnChange: false
 					input "deviceLinks", "bool", title: "Enable device links", defaultValue: false, submitOnChange: true
 					input "nodeBase", "enum", title: "Display nodes as hex or base10?", multiple: false, options: ["base16": "base16 (default)", "base10":"base10"], submitOnChange: true
@@ -132,6 +161,29 @@ def mainPage() {
 
 					input "resetSettings", "bool", title: "Force app settings reset", submitOnChange: true
 				}
+				if (permitDeviceAccess && !settings.deviceList && !state.hasInitializedDeviceList) {
+					section() {
+						log.info("Initializing devicesList with z-wave devices")
+						paragraph title: "initDevicesScript", """
+										<script id="addDevices">
+										async function loadUtilScript() {
+												await \$.getScript('${getAppLink("zwaveUtils.js")}')
+										}
+										\$(document).ready( async function() {
+											//console.log("ready");
+											await loadUtilScript()
+											await refreshDevicesList()
+											jsonSubmit(null,null,false)
+										})
+										</script>
+						"""
+					}
+				}
+				if (permitDeviceAccess) {
+					section("Show authorized devices", hideable: true, hidden:true) {
+						paragraph getDeviceListHtml()
+					}
+				}
 			} else {
 				section("") {
 					paragraph title: "Click Done", "Please click Done to install app before continuing"
@@ -139,6 +191,27 @@ def mainPage() {
 			}
 		}
 	}
+}
+
+private def getDeviceListHtml() {
+	def initHtml = """<span style="float:right;"><a href="" onclick="jsonSubmit('_action_href_name|devicesPage|2',null); return false">(edit)</a></span>"""
+	def results = deviceList.inject(initHtml, { r, dev -> 
+			def id = dev.id
+			def name = dev.getDisplayName()
+			r += (name + "<br>")
+	})
+	if (!deviceList) { results = initHtml + "NO Devices Authorized"}
+	return results;
+}
+
+private def getAddColsInput() {
+	def colOptions = ["status": "Status","security":"Security Mode","rttStdDev":"RTT Std Dev","lwrRssi":"LWR RSSI", "deviceType": "Device Type", "deviceManufacturer": "Device Manufacturer", "routingCount": "RoutingFor Count"]
+	if (settings?.permitDeviceAccess) {
+		colOptions.put("lastActive", "Last Active Time")
+		colOptions.put("beaming", "Is Beaming?")
+		colOptions.put("listening", "Is Listening?")
+	}
+	input "addCols", "enum", title: "Select additional columns to display", multiple: true, options: colOptions, submitOnChange: true
 }
 
 def remoteLog() {
@@ -166,7 +239,10 @@ def resetAppSettings() {
 	app.removeSetting('embedStyle')
 	app.removeSetting("addCols")
 	app.removeSetting("stateSave")
+	app.removeSetting("deviceList")
+	app.removeSetting("permitDeviceAccess")
 	state.remove('hasInitializedCols')
+	state.remove('hasInitializedDeviceList')
 }
 
 def resetHostOverride() {
@@ -175,48 +251,136 @@ def resetHostOverride() {
 	app.removeSetting("resetHost")
 }
 
+import org.codehaus.groovy.runtime.EncodingGroovyMethods
+
+def deviceDetails() {
+	def results = [:]
+	results = deviceList.inject([:], { r, dev -> 
+			def id = dev.id
+			def lastActiveStr = dev.getLastActivity()
+			def zwaveData = dev.getDataValue("zwNodeInfo")
+			if (!zwaveData) {
+				log.warn("${dev.getDisplayName()} has no zwNodeInfo. (Not a z-wave device?)")
+				return r;
+			}
+			def inCC = dev.getDataValue("inClusters")
+			def inCCSec = dev.getDataValue("secureInClusters")
+			def zwaveBytes = zwaveData.split(" ")
+			def zwaveDataLen = zwaveBytes.length
+
+			def nifBytes = []
+			def listening = false
+			def routing = false
+			def maxSpeed = -1
+			def speedBits = "?"
+			def rountingSlave = false
+			def flirs250 = false
+			def flirs10000 = false
+			def flirs = false
+			def extraSpeed
+			def inCCList = []
+			def inCCSecList = []
+			def zwavePlus = false
+			if (zwaveDataLen > 0) {
+				def rawBytes = EncodingGroovyMethods.decodeHex(zwaveBytes.join())
+				nifBytes = rawBytes.collect {it -> String.format("%8s", Integer.toBinaryString(it & 0xFF)).replace(" ", "0") }
+				def capHex = zwaveBytes[0]
+				listening = (Integer.parseInt(zwaveBytes[0], 16) & 0x80) ? true : false
+				routing = (Integer.parseInt(zwaveBytes[0], 16) & 0x40) ? true : false
+				flirs1000 = (Integer.parseInt(zwaveBytes[1], 16) & 0x40)
+				flirs250 = (Integer.parseInt(zwaveBytes[1], 16) & 0x20)
+				flirs = (flirs250 | flirs1000) ? true : false
+				beaming = (Integer.parseInt(zwaveBytes[1], 16) & 0x10) ? true : false
+				routingSlave = (Integer.parseInt(zwaveBytes[1], 16) & 0x08) ? true : false
+				speedBits = nifBytes[0].substring(2,5)
+				maxSpeed = Integer.parseInt(speedBits,2)
+				extraSpeed = (Integer.parseInt(zwaveBytes[2], 16) & 0x01) ? true : false
+
+				inCCList = inCC ? inCC.split(',') : []
+				inCCSecList = inCCSec ? inCCSec.split(',') : []
+				zwavePlus = (inCCList.contains('0x5E')) ? true : false
+			}
+			r.put(id, [
+				name: dev.getDisplayName(),
+				//data: dev.getData(),
+				listening: listening,
+				beaming: beaming,
+				routing: routing,
+				routingSlave: routingSlave,
+				maxSpeed: maxSpeed,
+				extraSpeed: extraSpeed,
+				flirs: flirs,
+				flirs250: flirs250,
+				flirs1000: flirs1000,
+				//nifBytes: nifBytes,
+				speedBits: speedBits,
+				status: dev.getStatus(),
+				lastActive: lastActiveStr,
+				zwaveData: zwaveData,
+				//zwaveBytes: zwaveBytes,
+				zwaveDataLen: zwaveDataLen,
+				inCC: inCCList,
+				inCCSec: inCCSecList,
+				zwavePlus: zwavePlus,
+				lastActiveTS: Date.parse("yyy-MM-dd HH:mm:ssZ","$lastActiveStr".replace("+00:00","+0000")).getTime()
+			])
+			r
+		}
+	)
+	results.now=(new Date()).getTime()
+	renderJson(results)
+
+}
+
+import groovy.json.JsonOutput
+def renderJson(obj)
+{
+	render contentType: 'application/json', data: JsonOutput.toJson(obj)
+}
+
+
 def meshInfo() {
 	def html = """
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <title>Hubitat Z-Wave Mesh Details</title>
 <link rel="stylesheet" type="text/css" href="/ui2/css/styles.min.css">
-<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.11.3/css/jquery.dataTables.min.css">
-<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/searchpanes/1.1.1/css/searchPanes.dataTables.min.css">
-<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css">
-<!-- 
-<script src="jquery-3.5.1.min.js"></script>
--->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/dt/dt-1.11.3/cr-1.5.5/fh-3.2.1/r-2.2.9/sp-1.4.0/sl-1.3.4/datatables.min.css"/>
+
+
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="${getAppLink("zwaveUtils.js")}"></script>
 <script src="${getAppLink("script.js")}"></script>
 <style>
 td.details-control div{
-    background: url('/ui2/images/sort_desc.png') no-repeat center center;
-    cursor: pointer;
+	background: url('/ui2/images/sort_desc.png') no-repeat center center;
+	cursor: pointer;
 	transform: rotate(-90deg);
 	position: relative;
 	left: -4px;
 }
 tr.shown td.details-control div{
-    background: url('/ui2/images/sort_desc.png') no-repeat center center;
+	background: url('/ui2/images/sort_desc.png') no-repeat center center;
 	transform: none;
 	left: auto;
 }
 div.dtsp-meshdetails-6:first-child {
-    min-width: 20%;
-    max-width: 20%;
+	min-width: 20%;
+	max-width: 20%;
 }
 
 div.dtsp-meshdetails-6 {
-    min-width: 14%;
-    max-width: 15.5%;
-    padding-left: 0.5%;
-    padding-right: 0.5%;
-    margin: 0px !important;
+	min-width: 14%;
+	max-width: 15.5%;
+	padding-left: 0.5%;
+	padding-right: 0.5%;
+	margin: 0px !important;
 }
 div.dtsp-panesContainer div.dtsp-searchPanes div.dtsp-searchPane {
-     flex-basis: 120px;
+	 flex-basis: 120px;
 }
+
 
 /*
 dialog {
@@ -227,7 +391,7 @@ dialog {
 */
 
 dialog:not([open]) {
-    display: none;
+	display: none;
 }
 
 .btn-nodeDetail {
@@ -238,12 +402,46 @@ dialog:not([open]) {
 	overflow: auto
 }
 
-.dtsp-buttonGroup {
-	display: none !important;
-}
 
 .dtsp-searchPanes .even:not(.selected) {
-    background-color: #ffffff !important;
+	background-color: #ffffff !important;
+}
+
+.tooltip {
+  position: relative
+}
+.tooltip .tooltiptext {
+  visibility: hidden;
+  display: inline-block;
+  width: 100px;
+  background-color: black;
+  color: #fff;
+
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+}
+
+.tooltip .tooltiptexttop {
+  /* Position the tooltip text - see examples below! */
+  position: absolute;
+  z-index: 1;
+  bottom: 100%;
+  left: 50%;
+  margin-left: -50px;
+}
+
+.tooltip .tooltiptextright {
+  /* Position the tooltip text - see examples below! */
+  position: absolute;
+  z-index: 1;
+  top: -5px;
+  left: 105%;
+}
+
+/* Show the tooltip text when you mouse over the tooltip container */
+.tooltip:hover .tooltiptext {
+  visibility: visible;
 }
 </style>
 </head>
@@ -263,27 +461,28 @@ dialog:not([open]) {
 </table>
 <div style="text-align:center;">&copy; 2020 Tony Fleisher. All Rights Reserved.</div>
 <dialog id="topologyDialog">
-    <span class="mdl-dialog__title">Z-Wave Topology</span>
-	<button id="hidRepeatersBtn" onclick="hideNonRepeaters()" data-toggle="modal">Hide NonRepeaters</button>
-	<button id="hidRepeatersBtn" onclick="getTopologyModal()" data-toggle="modal">Refresh</button>
-    <div class="mdl-dialog__content">
-        <p></p>
-        <p style="color: darkblue"><span id="zwave-topology-table"></span></p>
-    </div>
-    <div class="mdl-dialog__actions">
-        <button type="button" onclick="closeTopology()" class="mdl-button close" id="close-zwave-topology">Close</button>
-    </div>
+	<span class="mdl-dialog__title">Z-Wave Topology</span>
+	<button id="hideNonRepeatersBtn" onclick="hideNonRepeaters()" data-toggle="modal">Hide NonRepeaters</button>
+	<button id="showNonRepeatersBtn" onclick="showAllTopology()" style="display:none;" data-toggle="modal">Show All</button>
+	<button id="refreshRepeatersBtn" onclick="getTopologyModal()" data-toggle="modal">Refresh</button>
+	<div class="mdl-dialog__content">
+		<p></p>
+		<p style="color: darkblue"><span id="zwave-topology-table"></span></p>
+	</div>
+	<div class="mdl-dialog__actions">
+		<button type="button" onclick="closeTopology()" class="mdl-button close" id="close-zwave-topology">Close</button>
+	</div>
 </dialog>
 <dialog id="zwaveRepairStatus">
-    <span class="mdl-dialog__title">Z-Wave Repair</span>
-    <div class="mdl-dialog__content">
-        <p></p>
-        <p style="color: darkblue"><span id="zwave-repair-status"><br><br><br><br></span></p>
-    </div>
-    <div class="mdl-dialog__actions">
-        <button type="button" onclick="closeRepair()" class="mdl-button close" id="close-zwave-repair">Close</button>
-        <button type="button" class="mdl-button close" onclick="cancelRepair()" id="abort-zwave-repair">Abort</button>
-    </div>
+	<span class="mdl-dialog__title">Z-Wave Repair</span>
+	<div class="mdl-dialog__content">
+		<p></p>
+		<p style="color: darkblue"><span id="zwave-repair-status"><br><br><br><br></span></p>
+	</div>
+	<div class="mdl-dialog__actions">
+		<button type="button" onclick="closeRepair()" class="mdl-button close" id="close-zwave-repair">Close</button>
+		<button type="button" class="mdl-button close" onclick="cancelRepair()" id="abort-zwave-repair">Abort</button>
+	</div>
 </dialog>
 </body>
 </html>
@@ -291,146 +490,46 @@ dialog:not([open]) {
 	render contentType: "text/html", data: html
 }
 
-def scriptController() {
+def zwaveUtilsController() {
 	def javaScript = """
-const CMD_CLASS_Names = {
-		0x20: "Basic",
-		0x21: "Controller Replication",
-		0x22: "Application Status",
-		0x25: "Binary Switch",
-		0x26: "Multilevel Switch",
-		0x27: "All Switch (obsoleted)",
-		0x28: "Binary Toggle Switch (obsoleted)",
-		0x29: "Multilevel Toggle Switch (deprecated)",
-		0x2B: "Scene Activation",
-		0x2C: "Scene Actuator Configuration",
-		0x2D: "Scene Controller Configuration",
-		0x30: "Binary Sensor (deprecated)",
-		0x31: "Multilevel Sensor",
-		0x32: "Meter",
-		0x33: "Color Switch",
-		0x35: "Pulse Meter (deprecated)",
-		0x36: "Basic Tariff",
-		0x37: "HRV Status",
-		0x39: "HRV Control",
-		0x3A: "Demand Control Plan Configuration",
-		0x3B: "Demand Control Plan Monitor",
-		0x3C: "Meter Table Configuration",
-		0x3D: "Meter Table Monitor",
-		0x3E: "Meter Table Push Configuration",
-		0x3F: "Prepayment",
-		0x40: "Thermostat Mode",
-		0x41: "Prepayment Encapsulation",
-		0x42: "Thermostat Operating State",
-		0x43: "Thermostat Setpoint",
-		0x44: "Thermostat Fan Mode",
-		0x45: "Thermostat Fan State",
-		0x46: "Climate Control Schedule (deprecated)",
-		0x47: "Thermostat Setback",
-		0x48: "Rate Table Configuration",
-		0x49: "Rate Table Monitor",
-		0x4A: "Tariff Table Configuration",
-		0x4B: "Tariff Table Monitor",
-		0x4C: "Door Lock Logging",
-		0x4E: "Schedule Entry Lock (deprecated)",
-		0x50: "Basic Window Covering (obsoleted)",
-		0x51: "Move to Position Window Covering (obsoleted)",
-		0x53: "Schedule",
-		0x55: "Transport Service",
-		0x56: "CRC-16 Encapsulation (deprecated)",
-		0x57: "Application Capability (obsoleted)",
-		0x59: "Association Group Info",
-		0x5A: "Device Reset Locally",
-		0x5B: "Central Scene",
-		0x5E: "Z-Wave Plus Info",
-		0x60: "Multi Channel",
-		0x62: "Door Lock",
-		0x63: "User Code",
-		0x66: "Barrier Operator",
-		0x6C: "Supervision",
-		0x70: "Configuration",
-		0x71: "Notification (Alarm)",
-		0x72: "Manufacturer Specific",
-		0x73: "Powerlevel",
-		0x75: "Protection",
-		0x76: "Lock (deprecated)",
-		0x77: "Node Naming and Location",
-		0x79: "Sound Switch",
-		0x7A: "Firmware Update Meta Data",
-		0x7B: "Grouping Name (deprecated)",
-		0x7C: "Remote Association Activation (obsoleted)",
-		0x7D: "Remote Association Configuration (obsoleted)",
-		0x80: "Battery",
-		0x81: "Clock",
-		0x82: "Hail (obsoleted)",
-		0x84: "WakeUp",
-		0x85: "Association",
-		0x86: "Version",
-		0x87: "Indicator",
-		0x88: "Proprietary (obsoleted)",
-		0x89: "Language",
-		0x8A: "Time",
-		0x8B: "Time Parameters",
-		0x8C: "Geographic Location",
-		0x8E: "Multi Channel Association",
-		0x8F: "Multi Command",
-		0x90: "Energy Production",
-		0x92: "Screen Meta Data",
-		0x93: "Screen Attributes",
-		0x94: "Simple AV Control",
-		0x98: "Security",
-		0x9A: "IP Configuration (obsoleted)",
-		0x9B: "Association Command Configuration",
-		0x9C: "Alarm Sensor (deprecated)",
-		0x9D: "Alarm Silence",
-		0x9E: "Sensor Configuration (obsoleted)",
-		0x9F: "Security 2"
-}
 
-function useHex() {
-	return "${settings?.nodeBase}" === "base16"
-}
-
-function loadScripts() {
-	\$.get('/ui2/js/hubitat.min.js')
-	updateLoading('Loading...','Getting script sources');
-	var s1 = \$.getScript('https://unpkg.com/axios/dist/axios.min.js', function() {
-		//console.log("axios loaded")
+function loadAxios() {
+	return \$.getScript('https://unpkg.com/axios/dist/axios.min.js', function() {
+		console.log("axios loaded")
 	});
-	
-	var s2 = \$.getScript('https://cdn.datatables.net/1.11.3/js/jquery.dataTables.min.js')
-	.then(s => \$.getScript('https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js'))
-	.then(s => \$.getScript('https://cdn.datatables.net/searchpanes/1.1.1/js/dataTables.searchPanes.min.js'))
-	.then(s => {
-
-		function numberSort(a,b) {
-			var token1a = a.split('-',2)[0].trim()
-			var token1b = b.split('-',2)[0].trim()
-			var vala = parseInt(token1a)
-			var valb = parseInt(token1b)
-			if (!vala && vala !== 0) return 1;
-			if (!valb && vala !== 0) return -1;
-			return vala < valb ? -1 : 1			
-		}
-		jQuery.extend( jQuery.fn.dataTableExt.oSort, {
-			"initialNumber-asc": function ( a, b ) {
-				return numberSort(a,b);
-			},
-			"initialNumber-desc": function ( a, b ) {
-				return numberSort(a,b) * -1;
-			},
-		})
-	})
-	;
-	return Promise.all([s1, s2]);
 }
 
-// Get transformed list of devices (see transformDevice)
-function getZwaveList() {
+async function refreshDevicesList() {
+		var devList = await getZwaveList()
+		if (!window.axios) {
+			await loadAxios()
+		}
+		console.log("Collecting zwave device ids")
+		var deviceIds = devList.reduce( (acc, val) => {
+			acc.push(val.hubDeviceId); return acc;
+		}, [])
+		if ($enableDebug) {
+			console.log(deviceIds)
+		}
+		if ($enableDebug) {
+			var m = `Setting deviceList from zwave list: \${deviceIds.length}`
+			console.log(m)
+			hubLog("debug", m)
+		}
+		return updateDevicesInApp(deviceIds)
+}
+
+// Get transformed list of devices (see transformDevice) from hubitat zwave details webpage
+async function getZwaveList() {
+	if (!window.axios) {
+		await loadAxios()
+	}
+
 	const instance = axios.create({
 		timeout: 5000,
 		responseType: "text" // iOS seems to fail (reason unknown) with document here
 		});
+
 
 	return instance
 	.get('/hub/zwaveInfo')
@@ -453,33 +552,6 @@ function getZwaveList() {
 	} );
 }
 
-function getZwaveNodeDetail() {
-	const instance = axios.create({
-		timeout: 5000
-	});
-
-	return instance
-	.get('/hub/zwaveNodeDetail')
-	.then(response => {
-		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
-
-		return response
-	})
-	.catch(error => { 
-		console.error(error);
-		updateLoading("Error", error);
-		hubLog("error", `zwaveNodeDetail: Error getting zwave details: \${error}`)
-	} );
-}
-
-function hubLog(level,log) {
-	const instance = axios.create({
-		timeout: 5000
-	});
-
-	return instance
-	.post("${getAppLink("remoteLog")}", { level: level, log: log})
-}
 
 function transformZwaveRow(row) {
 	var childrenData = row.children
@@ -494,17 +566,20 @@ function transformZwaveRow(row) {
 	// "01 -> 08 -> 0C -> 1B 100kbps"
 	var routesText = childrenData[6].innerText ? childrenData[6].innerText.trim() : ''
 	var routers = routesText ? routesText.split(' -> ') : []
+	var routersForDisplay = []
+	var routersList = []
 	
 	var connectionSpeed = "Unknown"
 	if (routers.length > 0) {
-		var lastParts = routers.splice(-1,1)
-		routers.splice(0,1)
+		var lastParts = routers.splice(-1,1) // Remove Last element (this device w/ speed)
+		routers.splice(0,1) // Remove first element (always 01; hub)
 		connectionSpeed = lastParts[0].split(' ')[1]
-			routers = routers.map(r => useHex() ? "0x" + r : parseInt("0x"+r))
+		routersList = routers
+		routersForDisplay = routers.map(r => useHex() ? "0x" + r : parseInt("0x"+r))
 	}
 
 	if (routers.length == 0 && connectionSpeed != '') {
-		routers = ['DIRECT']
+		routersForDisplay = ['DIRECT']
 	}
 
 	var nodeText = childrenData[0].innerText.trim()
@@ -520,8 +595,6 @@ function transformZwaveRow(row) {
 		label = childrenData[4].innerText.trim()
 		deviceLink = childrenData[4].firstElementChild.getAttribute('href')
 		hubDeviceId = deviceLink.split('/')[3]
-	} else {
-		label = "<NO NAME>"
 	}
 
 	var typeParts = childrenData[3].innerHTML.split("<br>")
@@ -530,45 +603,72 @@ function transformZwaveRow(row) {
 		var manufacturer = typeParts[1]
 	}
 
-	// Command Classes
-	var commandClasses = null
-	var inCommandClasses = []
-
-	var commandClassesText = childrenData[3].innerText
-	const CC_REGEX = /in:(.*), out:(.*)/
-	var classesParts = commandClassesText.match(CC_REGEX)
-
-	if (classesParts != null) {
-		var inClusters = classesParts && classesParts.length > 1 ? classesParts[1].trim() : undefined
-		inCommandClasses = inClusters && inClusters.length > 0 ? inClusters.split(', ') : []
-
-		var outClusters = classesParts && classesParts.length > 2 ? classesParts[2].trim() : undefined
-		var outCommandClasses = outClusters && outClusters.length > 0 ? outClusters.split(', ') : []
-		commandClasses = inCommandClasses.concat(outCommandClasses)
-	}
-
 	var deviceData = {
 		id: devId,
 		id2: devId2,
 		devIdDec: devIdDec,
 		node: nodeText.replace(' ', '&nbsp;'),
 		metrics: statMap,
-		routers: routers,
+		routers: routersForDisplay,
+		routersList: routersList,
 		label: label,
 		type: type,
 		manufacturer: manufacturer,
 		deviceLink: deviceLink,
 		hubDeviceId: hubDeviceId,
 		deviceSecurity: childrenData[5].innerText.trim(),
-		routeHtml: routers.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` -> \${v}`, "") + (routers[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + devId : devId2}`) ,
+		routeHtml: routersForDisplay.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` -> \${v}`, "") + (routersForDisplay[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + devId : devId2}`) ,
 		deviceStatus: childrenData[2].firstChild.data.trim(),
-		connection: connectionSpeed,
-		commandClasses: commandClasses,
-		isZwavePlusDevice: inCommandClasses.length > 0 && inCommandClasses[0] == '0x5E',
-		isSleepyDevice: inCommandClasses.length > 0 && inCommandClasses.includes('0x84')
+		connection: connectionSpeed
 	}
 	return deviceData
 }
+
+function updateDevicesInApp(devices) {
+	var updateLink = "/installedapp/update/json"
+	var appLink = "${getAppLink()}"
+	var appId = "${getAppId()}"
+
+	const instance = axios.create({
+		timeout: 5000,
+		config: {headers: {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}}
+	});
+
+	var postData = {
+
+		"settings[deviceList]": devices.join(','),
+		formAction: "update",
+		id: appId,
+		version: 2,
+		appTypeId: '',
+		appTypeName: '',
+		currentPage: 'devicesPage',
+		// pageBreadcrumbs: '%5B%5D',
+		"deviceList.type": 'capability.*',
+		"deviceList.multiple": 'true',
+		deviceList: 'deviceList'
+		// referrer: '',
+		// url: `/installedapp/configure/\${appId}/devicesPage`
+
+	}
+
+	if ($enableDebug) {
+		console.log("Sending deviceList update")
+		console.log(postData)
+	}
+
+	return instance
+		.post(updateLink, serializeToURL(postData))
+}
+
+function serializeToURL( obj ) {
+	let str = Object.keys(obj).reduce(function(a, k){
+		a.push(k + '=' + encodeURIComponent(obj[k]));
+		return a;
+	}, []).join('&');
+	return str;
+}
+
 
 function translateDeviceType(deviceType) {
 	switch (deviceType) {
@@ -833,19 +933,232 @@ function translateDeviceType(deviceType) {
 	}
 }
 
+
+function hubLog(level,log) {
+  if (window.axios) {
+	const instance = axios.create({
+		timeout: 5000
+	});
+
+	return instance
+	.post("${getAppLink("remoteLog")}", { level: level, log: log})
+  }
+}
+
 function updateLoading(msg1, msg2) {
 	\$('#loading1').text(msg1);
 	\$('#loading2').text(msg2);
+	if ($enableDebug) {
+		if (msg1 || msg2) {
+			hubLog("debug", `\${msg1} - \${msg2}`)
+		}
+	}
+}
+
+
+function useHex() {
+	return "${settings?.nodeBase}" === "base16"
+}
+
+function hasDeviceAccess() {
+	return ${settings.permitDeviceAccess}
+}
+
+
+	"""
+
+	render contentType: "application/javascript", data: javaScript.replaceAll('\t','  ')
+}
+
+def scriptController() {
+	def javaScript = """
+const CMD_CLASS_Names = {
+		0x20: "Basic",
+		0x21: "Controller Replication",
+		0x22: "Application Status",
+		0x25: "Binary Switch",
+		0x26: "Multilevel Switch",
+		0x27: "All Switch (obsoleted)",
+		0x28: "Binary Toggle Switch (obsoleted)",
+		0x29: "Multilevel Toggle Switch (deprecated)",
+		0x2B: "Scene Activation",
+		0x2C: "Scene Actuator Configuration",
+		0x2D: "Scene Controller Configuration",
+		0x30: "Binary Sensor (deprecated)",
+		0x31: "Multilevel Sensor",
+		0x32: "Meter",
+		0x33: "Color Switch",
+		0x35: "Pulse Meter (deprecated)",
+		0x36: "Basic Tariff",
+		0x37: "HRV Status",
+		0x39: "HRV Control",
+		0x3A: "Demand Control Plan Configuration",
+		0x3B: "Demand Control Plan Monitor",
+		0x3C: "Meter Table Configuration",
+		0x3D: "Meter Table Monitor",
+		0x3E: "Meter Table Push Configuration",
+		0x3F: "Prepayment",
+		0x40: "Thermostat Mode",
+		0x41: "Prepayment Encapsulation",
+		0x42: "Thermostat Operating State",
+		0x43: "Thermostat Setpoint",
+		0x44: "Thermostat Fan Mode",
+		0x45: "Thermostat Fan State",
+		0x46: "Climate Control Schedule (deprecated)",
+		0x47: "Thermostat Setback",
+		0x48: "Rate Table Configuration",
+		0x49: "Rate Table Monitor",
+		0x4A: "Tariff Table Configuration",
+		0x4B: "Tariff Table Monitor",
+		0x4C: "Door Lock Logging",
+		0x4E: "Schedule Entry Lock (deprecated)",
+		0x50: "Basic Window Covering (obsoleted)",
+		0x51: "Move to Position Window Covering (obsoleted)",
+		0x53: "Schedule",
+		0x55: "Transport Service",
+		0x56: "CRC-16 Encapsulation (deprecated)",
+		0x57: "Application Capability (obsoleted)",
+		0x59: "Association Group Info",
+		0x5A: "Device Reset Locally",
+		0x5B: "Central Scene",
+		0x5E: "Z-Wave Plus Info",
+		0x60: "Multi Channel",
+		0x62: "Door Lock",
+		0x63: "User Code",
+		0x66: "Barrier Operator",
+		0x6C: "Supervision",
+		0x70: "Configuration",
+		0x71: "Notification (Alarm)",
+		0x72: "Manufacturer Specific",
+		0x73: "Powerlevel",
+		0x75: "Protection",
+		0x76: "Lock (deprecated)",
+		0x77: "Node Naming and Location",
+		0x79: "Sound Switch",
+		0x7A: "Firmware Update Meta Data",
+		0x7B: "Grouping Name (deprecated)",
+		0x7C: "Remote Association Activation (obsoleted)",
+		0x7D: "Remote Association Configuration (obsoleted)",
+		0x80: "Battery",
+		0x81: "Clock",
+		0x82: "Hail (obsoleted)",
+		0x84: "WakeUp",
+		0x85: "Association",
+		0x86: "Version",
+		0x87: "Indicator",
+		0x88: "Proprietary (obsoleted)",
+		0x89: "Language",
+		0x8A: "Time",
+		0x8B: "Time Parameters",
+		0x8C: "Geographic Location",
+		0x8E: "Multi Channel Association",
+		0x8F: "Multi Command",
+		0x90: "Energy Production",
+		0x92: "Screen Meta Data",
+		0x93: "Screen Attributes",
+		0x94: "Simple AV Control",
+		0x98: "Security",
+		0x9A: "IP Configuration (obsoleted)",
+		0x9B: "Association Command Configuration",
+		0x9C: "Alarm Sensor (deprecated)",
+		0x9D: "Alarm Silence",
+		0x9E: "Sensor Configuration (obsoleted)",
+		0x9F: "Security 2"
+}
+
+function loadScripts() {
+	\$.get('/ui2/js/hubitat.min.js')
+	updateLoading('Loading...','Getting script sources');
+
+	return \$.getScript('https://cdn.datatables.net/v/dt/dt-1.11.3/cr-1.5.5/fh-3.2.1/r-2.2.9/sp-1.4.0/sl-1.3.4/datatables.min.js')
+	.then(s => {
+
+		function numberSort(a,b) {
+			var token1a = a.split('-',2)[0].trim()
+			var token1b = b.split('-',2)[0].trim()
+			var vala = parseInt(token1a)
+			var valb = parseInt(token1b)
+			if (!vala && vala !== 0) return 1;
+			if (!valb && vala !== 0) return -1;
+			return vala < valb ? -1 : 1			
+		}
+		jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+			"initialNumber-asc": function ( a, b ) {
+				return numberSort(a,b);
+			},
+			"initialNumber-desc": function ( a, b ) {
+				return numberSort(a,b) * -1;
+			},
+		})
+	})
+	;
+}
+
+
+// Get data from zwaveNodeDetail endpoint (built-in)
+function getZwaveNodeDetail() {
+	const instance = axios.create({
+		timeout: 5000
+	});
+
+	return instance
+	.get('/hub/zwaveNodeDetail')
+	.then(response => {
+		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
+
+		return response.data
+	})
+	.catch(error => { 
+		console.error(error);
+		updateLoading("Error", error);
+		hubLog("error", `zwaveNodeDetail: Error getting zwave details: \${error}`)
+	} );
+}
+
+// Get details from devices app endpoint and merge into devList
+function getDeviceDetails() {
+	const instance = axios.create({
+		timeout: 5000
+	});
+
+	return instance
+	.get('${getAppLink("deviceDetails")}')
+	.then(response => {
+		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
+
+		return response.data
+	})
+	.catch(error => { 
+		console.error(error);
+		updateLoading("Error", error);
+		hubLog("error", `zwaveNodeDetail: Error getting zwave details: \${error}`)
+	} );
 }
 
 async function getData() {
 
 	var devList = await getZwaveList()
+
 	var fullNameMap = devList.reduce( (acc,val) => {
 						 acc[useHex() ? `0x\${val.id}` : val.id2]= `\${useHex() ? `0x\${val.id}` : val.id2} - \${val.label}`;
 						 return acc;
 					 }, {});
 
+
+	// Build routersFor map
+	var routersFor = devList.reduce( (acc, val) => {
+		var myRouters = val.routersList
+		var fullName = fullNameMap[useHex() ? `0x\${val.id}` : val.id2]
+		myRouters.map(r => {
+			//console.log(`\${r} is a router for \${fullName}`)
+			if (!acc.has(r)) {
+				acc.set(r, [])
+			}
+			l = acc.get(r)
+			l.push(fullName)
+		})
+		return acc
+	}, new Map())
 	// Pseudo entry for direct-connected devices
 	fullNameMap.DIRECT = 'DIRECT'
 
@@ -853,11 +1166,38 @@ async function getData() {
 	var nodeDetails = await getZwaveNodeDetail()
 
 	updateLoading('Loading..', 'Building Neighbors Lists')
-	buildNeighborsLists(fullNameMap, nodeDetails.data)
+	buildNeighborsLists(fullNameMap, nodeDetails)
+
+	var deviceDetails = {}
+	if (hasDeviceAccess()) {
+		deviceDetails = await getDeviceDetails()
+		var missingNonRepeaters = devList.reduce( (acc, val) => {
+			var hubId = val.hubDeviceId.toString()
+			var zwId = val.id2.toString()
+			var detail = deviceDetails[val.hubDeviceId.toString()]
+			if (detail && detail.listening === false && !nonRepeaters.has(zwId)) {
+				acc.push(zwId)
+			}
+			return acc
+		}, [])
+
+		if (missingNonRepeaters.length > 0) {
+			hubLog("info", "Non-listening devices missing: Adding to nonRepeaters: " + missingNonRepeaters.toString())
+			missingNonRepeaters.forEach(item => nonRepeaters.add(item))
+		}
+	}
 
 	var tableContent = devList.map( dev => {
 		var routersFull = dev.routers.map(router => fullNameMap[router] || `\${router} - UNKNOWN`)
-		var detail = nodeDetails.data[dev.id2.toString()]
+		var detail = nodeDetails[dev.id2.toString()]
+		var devDetail
+		
+		if (dev.hubDeviceId && hasDeviceAccess()) {
+			devDetail = deviceDetails[dev.hubDeviceId.toString()]
+			if (devDetail) {
+				dev.commandClasses = devDetail.inCC.concat(devDetail.inCCSec)
+			}
+		}
 
 		var variance = 0
 		var stdDev = "0.00"
@@ -872,16 +1212,21 @@ async function getData() {
 		}
 		dev.metrics.rtt_variance = variance
 		dev.metrics.std_dev = stdDev
-		return {...dev, 'routersFull': routersFull, 'detail': detail}
+		return {...dev, 'routerOf': routersFor.get(dev.id), 'routersFull': routersFull, 'detail': detail, 'devDetail': devDetail}
 	})
 
 	return tableContent
 }
 
-var deviceDetailsMap = new Map()
+var deviceDetailsMap = new Map() // cache/memoize data for each device (deviceId => map)
 
+// Get data from device settings screen if we can't get it somewhere else
 function getDeviceInfo(devId) {
-	// console.log("Getting Device Detail for " + devId)
+	console.log("Getting Device Detail for " + devId)
+	if (!devId) {
+		hubLog("info", "No hub device for " + devId);
+		return Promise.resolve({});
+	}
 	if (deviceDetailsMap.has(devId)) {
 		// console.log("Returning details for " + devId + " from cache")
 		return Promise.resolve(deviceDetailsMap.get(devId))
@@ -894,19 +1239,14 @@ function getDeviceInfo(devId) {
 	.get('/device/edit/' + devId)
 	.then(response => {
 		var doc = new jQuery(response.data)
-		var deviceData = doc.find('#tableDeviceDetails li')
-		var inClusters
-		var outClusters
-		deviceData.each (
+		var deviceData = doc.find('#data-label ~ td li')
+		var details = {}
+		deviceData.map (
 			(index,row) => {
-				var kvp = row.innerText.split(":\\n")
-				if (kvp[0].trim() == "inClusters")
-					inClusters = kvp[1].trim()
-				else if (kvp[0].trim() == "outClusters")
-					outClusters = kvp[1].trim()
+				var kvp = row.innerText.split(":")
+				details[kvp[0].trim()] = kvp[1].trim()
 			}
 		)
-		var details = {inClusters,outClusters}
 		deviceDetailsMap.set(devId, details)
 		return details
 	})
@@ -946,6 +1286,7 @@ function buildNeighborsLists(fullnameMap, nodeData) {
 		var devId = e1[0]
 		var detail = e1[1]
 		if (detail.neighbors) {
+			var hasNonHubNeighbor = false;
 			Object.entries(detail.neighbors).forEach( e2 => {
 					var neighborId = e2[0]
 					var neighborDetail = e2[1]
@@ -970,7 +1311,16 @@ function buildNeighborsLists(fullnameMap, nodeData) {
 						fullnameMap[nHex] = `\${nHex} - UNKNOWN`
 					}
 
+					if (!hasNonHubNeighbor && parseInt(neighborId) > 5) {
+						hasNonHubNeighbor = true
+					}
+
 			})
+
+			if (!hasNonHubNeighbor) {
+				hubLog("debug", "No neighbors: Adding to nonRepeaters: " + devId)
+				nonRepeaters.add(devId)
+			}
 		}
 	})
 }
@@ -986,19 +1336,20 @@ function displayRowDetail(row) {
 	// On demand data
 	if (!data.commandClasses) {
 		var inClusters = detailData.inClusters && detailData.inClusters.length > 1 ? detailData.inClusters.split(',') : []
-		var outClusters = detailData.outClusters && detailData.outClusters.length > 1 ? detailData.outClusters.split(',') : []
-		var commandClasses = inClusters.concat(outClusters)
+		var secureInClusters = detailData.secureInClusters && detailData.secureInClusters.length > 1 ? detailData.secureInClusters.split(',') : []
+		var commandClasses = inClusters.concat(secureInClusters)
 		// Update data
-		//console.log("Command classes is: " + commandClasses)
+		console.log("Command classes is: " + commandClasses)
 		data.commandClasses = commandClasses
-		row.data(data)
 	}
-
 	var html = '<div><table>'
 
 	// Header Row
 	html += '<tr>'
 	html += '<th>Repeaters</th>'
+	if (deviceData.routerOf && deviceData.routerOf.length > 0) {
+		html+= '<th>Routing For</th>'
+	}
 	html += '<th>Neighbors</th><th>NeighborOf</th>'
 
 	if (data.commandClasses && data.commandClasses.length > 0) {
@@ -1010,10 +1361,19 @@ function displayRowDetail(row) {
 	// End Header Row
 
 	html += '<tr>'
+	// Repeaters
 	html += '<td style="vertical-align: top;">'
 	html += deviceData.routersFull.join('<br/>')
 	html += '</td>'
 
+	// 	RoutingFor
+	if (deviceData.routerOf && deviceData.routerOf.length > 0) {
+		html += '<td style="vertical-align: top;">'
+		html += deviceData.routerOf.join('<br/>')
+		html += '</td>'		
+	}
+
+	// Neighbors
 	html += '<td style="vertical-align: top;">'
 	var neighborListStyle = "list-style-type:none;margin:0;padding:0"
 	var neighborList = neighborsMap.get(deviceData.id2.toString())
@@ -1029,7 +1389,7 @@ function displayRowDetail(row) {
 			if (!symetry) { color = "orange"}
 			html += `<li \${color ? `style="color:\${color}"` : ""}>`
 			if (neighborId < 6) {
-				html += useHex() ? '0x' : ''
+				html += useHex() ? '0x0' : '' // 0-pad for hex value
 				html += `\${neighborId} - HUB`
 			} else {
 				var deviceData = findDeviceByDecId(neighborId)
@@ -1045,7 +1405,7 @@ function displayRowDetail(row) {
 		html += '</ul>'
 	}
 	html += '</td>'
-
+	// NeighborOf
 	html += '<td style="vertical-align: top;">'
 	if (neighborOfList && neighborOfList.length > 0) {
 		html += `<ul style="\${neighborListStyle}">`
@@ -1076,6 +1436,7 @@ function displayRowDetail(row) {
 	}
 	html += '</td>'
 
+	// Command Classes
 	if (data.commandClasses && data.commandClasses.length > 0) {
 		html += '<td style="vertical-align: top;">'
 		data.commandClasses.forEach( cc => {
@@ -1105,7 +1466,7 @@ function displayRowDetail(row) {
 	html += '</td>'
 
 	html += '</tr></table>'
-	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a slave (non-repeater)</p>'
+	html += '<p><sup style="vertical-align:text-top;">*</sup>Device is a non-repeater</p>'
 	html += '</div>'
 	return html
   })
@@ -1121,13 +1482,12 @@ function zwaveNodeRepair(zwaveNodeId) {
 	\$("#close-zwave-repair").attr("disabled", true)
 	\$("#abort-zwave-repair").attr("disabled", false)
 	if (dialogPolyfill && !zwaveRepairStatus.showModal) {
-             dialogPolyfill.registerDialog(zwaveRepairStatus);
-    }
+			 dialogPolyfill.registerDialog(zwaveRepairStatus);
+	}
 	\$.ajax({
 		url: "/hub/zwaveNodeRepair2?zwaveNodeId="+zwaveNodeId,
 		type: "GET",
 		success: function (data) {
-			//console.log(data)
 				repairUpdateInterval = setInterval(checkZwaveRepairStatus, 3000)
 				\$("#zwave-repair-status").html('')
 				if (zwaveRepairStatus.showModal) {
@@ -1146,7 +1506,6 @@ function checkZwaveRepairStatus(){
 		type: "GET",
 		dataType: 'JSON',
 		success: function (data) {
-			// console.log(data.stage)
 			\$("#zwave-repair-status").html(data.html)
 			if(data.stage === "IDLE"){
 				\$("#close-zwave-repair").attr("disabled", false)
@@ -1163,6 +1522,45 @@ function checkZwaveRepairStatus(){
 	});
 }
 
+
+function labelTopologyHeads(sel, ttClass) {
+	sel.each( (i, data) => {
+		var td = \$(data)
+		var str = data.innerHTML
+		//console.log(str)
+		if (str.match(/[A-F0-9]/)) {
+			if (str == "01") {
+				td.prop("aria-label","HUB")
+				td.addClass("tooltip")
+				td.append(`<span class="tooltiptext \${ttClass}">HUB</span>`)
+			} else {
+				var d = findDeviceByHexId(str)
+				if (d != null) {
+					td.prop("aria-label", d.label)
+					td.addClass("tooltip")
+					td.append(`<span class="tooltiptext \${ttClass}">\${d.label}</span>`)
+				}
+			}
+		} 
+
+	}) 
+}
+
+function labelTopologyCells(index, row, labels, ttClass) {
+ row.find('td:nth-child(n+2)').each( (i, o) => {
+	 var seen = "not seen";
+	 if (o.bgColor == 'white') return;
+	 if (o.bgColor == 'blue') seen = "seen";
+	 var myLabel = labels[index]
+	 var dstLabel = labels[i]
+	 var td = \$(o)
+	 td.prop("aria-label", myLabel + " -> " + dstLabel + ":" + seen)
+	 td.addClass("tooltip")
+	 td.append(`<span class="tooltiptext \${ttClass}">\${myLabel + " -> " + dstLabel + ":" + seen}</span>`)
+
+ })
+}
+
 function getTopologyModal() {
 	if (dialogPolyfill && !topologyDialog.showModal) {
 		dialogPolyfill.registerDialog(topologyDialog);
@@ -1173,6 +1571,20 @@ function getTopologyModal() {
 		success: function(result) {
 			\$("#zwave-topology-table").html(result);
 			topologyDialog.showModal();
+			// Insert tooltips
+			var topr = \$('#topologyDialog table tbody tr:nth-child(1) td:nth-child(n+2)')
+			var c1 = \$('#topologyDialog table tbody tr:nth-child(n+1) td:nth-child(1)')
+			
+			var deviceHexIds = topr.map( function() { return this.innerHTML})
+			var deviceLabels = deviceHexIds.map( (i,o) => { if (o === '01') {return "HUB" } else return findDeviceByHexId(o).label })
+
+			labelTopologyHeads(topr, "tooltiptexttop")
+			labelTopologyHeads(c1, "tooltiptextright")
+
+			var tRows = \$('#topologyDialog table tbody tr:nth-child(n+2)')
+			tRows.each ( (i,row) => {
+				labelTopologyCells(i,\$(row),deviceLabels, "tooltiptexttop")
+			})
 		}
 	});
 }
@@ -1197,20 +1609,23 @@ function closeTopology() {
 	dialog.close()
 }
 
+function showAllTopology() {
+	\$('#topologyDialog table tbody tr td').show()
+	\$('#topologyDialog table tbody tr').show()
+	\$('#hideNonRepeatersBtn').show()
+	\$('#showNonRepeatersBtn').hide()
+}
+
 function hideNonRepeaters() {
 	topr = \$('#topologyDialog table tbody tr:nth-child(1)') // Get the top row with nodes (hex starting in position 2)
 	rowItems = topr[0].innerText.split(/\\s+/) // Split into a list
 	rowItems.slice(2).forEach( (item,index) => {
 		if(item.match(/[A-F0-9]/)) {
+			\$('#hideNonRepeatersBtn').hide()
+			\$('#showNonRepeatersBtn').show()
 			if ($enableDebug) console.log(`Testing \${item}`)
 			const d = findDeviceByHexId(item)
-			if (d.isSleepyDevice) {
-				if ($enableDebug) console.log(`\${item} is sleepy; hiding`)
-				\$(`#topologyDialog table tbody tr td:nth-child(\${index+3})`).hide()
-				\$(`#topologyDialog table tbody tr:nth-child(\${index+3})`).hide()
-			} else {
-				if ($enableDebug) console.log('not sleepy')
-			}
+
 			if (nonRepeaters.has(d.id2.toString())) {
 				if ($enableDebug) console.log(`\${item} is not a repeater; hiding`)
 				\$(`#topologyDialog table tbody tr td:nth-child(\${index+3})`).hide()
@@ -1231,6 +1646,7 @@ function hideNonRepeaters() {
 	})
 }
 
+// For embeded mode, load the app into the app screen
 function loadApp(appURI) {
 	const instance = axios.create({
 		timeout: 5000,
@@ -1245,26 +1661,26 @@ function loadApp(appURI) {
 		var h = doc.find('head').children()
 		\$('head').append(h)
 
-        var c = doc.find('body').children()
+		// Hide current page content and add/show the fetched doc
+		var c = doc.find('body').children()
 		\$('main > :first-child').children().hide()
-        \$('main > :first-child').append(c)
-        var currentPage = \$('#currentPage').val()
-        history.pushState({currentPage: currentPage, previousPage: null, statsLoaded: true, appURI: appURI}, "View Hub Stats", "?page=view&debug=true")
+		\$('main > :first-child').append(c)
+
+		var currentPage = \$('#currentPage').val()
+		history.pushState({currentPage: currentPage, previousPage: null, statsLoaded: true, appURI: appURI}, "View Hub Stats", "?page=view&debug=true")
 	})
 	.catch(error => { console.error(error); updateLoading("Error", error);} );
 }
 
 window.onpopstate = function(event) {
-    //console.log("popstate")
-    //console.log(event)
-    if (event.state == null) {
-        return
-    }
-    if (event.state.statsLoaded) {
-        loadScripts().then( r => loadApp(event.state.appURI).then(d => doWork()))
-    } else {
-        location.reload()
-    }
+	if (event.state == null) {
+		return
+	}
+	if (event.state.statsLoaded) {
+		loadScripts().then( r => loadApp(event.state.appURI).then(d => doWork()))
+	} else {
+		location.reload()
+	}
 }
 
 \$.ajaxSetup({
@@ -1274,6 +1690,17 @@ var tableContent;
 var tableHandle;
 if ( "${settings?.embedStyle}" != 'inline') {
 	\$(document).ready(doWork())
+}
+
+function searchPanesList() {
+	var panes = ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev', 'Device Type', 'Manufacturer']
+	if (hasDeviceAccess) {
+		panes.push('listening')
+		panes.push('Beaming')
+		panes.push('FLiRS')
+		panes.push('Z-Wave Plus')
+	}
+	return panes
 }
 
 function doWork() {
@@ -1287,9 +1714,6 @@ function doWork() {
 
 				// Setup State handler
 				\$('#mainTable').on('requestChild.dt', async function(e, row) {
-					// console.log(`Restoring child for row`)
-					// console.log(row)
-					// console.log(e)
 					if (row.data().hubDeviceId != '') {
 						var content = await displayRowDetail(row)
 						row.child(content).show();
@@ -1306,9 +1730,9 @@ function doWork() {
 					columns: [
 						//{ data: 'networkType', title: 'Type', searchPanes: { preSelect:['ZWAVE','ZIGBEE']} },
 						{
-							"className":      'details-control',
-							"orderable":      false,
-							"data":           null,
+							"className": 'details-control',
+							"orderable": false,
+							"data": null,
 							"defaultContent": '<div>&nbsp;</div>'
 						},
 						{ data: useHex() ? 'id' : 'id2', title: 'Node',
@@ -1343,11 +1767,21 @@ function doWork() {
 								}
 							}
 						},
-						{ data: 'label', title: 'Device name', defaultContent: "!NO DEVICE!"
-						,
+						{ data: 'label', title: 'Device name', 
+							render: function(data, type, row) {
+								if (type === 'display') {
+									if (!data) {
+										return "NO DEVICE FOUND"
+									}
+								}
+								return data
+							},
 							createdCell: function (td, cellData, rowData, row, col) {
-								if ($deviceLinks == true){
+								if ($deviceLinks == true && rowData.deviceLink){
 									\$(td).wrapInner(`<a href="\${rowData.deviceLink}">`)
+								}
+								if (cellData == "") {
+									\$(td).css('color', 'red')
 								}
 							}
 						},
@@ -1362,11 +1796,12 @@ function doWork() {
 						{ data: 'routersFull', title: 'Repeater', visible: false,
 							render: {'_':'[, ]', sp: '[]'},
 							defaultContent: "None",
-							searchPanes : { orthogonal: 'sp' },
+							searchPanes : { orthogonal: 'sp', controls: false },
 							type: 'initialNumber'
 						},
 						{ data: 'connection', title: 'Connection <br/>Speed', defaultContent: "Unknown",
-							searchPanes: { header: 'Speed', controls: false}},
+							searchPanes: { header: 'Speed', controls: false}
+						},
 						{ data: 'metrics.RTT Avg', title: 'RTT Avg', defaultContent: "n/a", searchPanes: {orthogonal: 'sp', controls: false},
 							render: function(data, type, row) {
 								var val = data.match(/(\\d*)ms/)[1]
@@ -1441,7 +1876,11 @@ function doWork() {
 							}
 
 						},
-						{ data: 'metrics.Neighbors', title: 'Neighbor<br/>Count', defaultContent: "n/a", 
+						{data: 'routerOf', title: "RoutingFor<br/>Count", defaultContent: 0,
+							visible: ${settings?.addCols?.contains("routingCount")},
+							render:function(data, type, row) { return data ? data.length : 0 }
+						},
+						{ data: 'metrics.Neighbors', title: 'Neighbor<br/>Count', defaultContent: "n/a",
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData == 2) {
@@ -1452,7 +1891,7 @@ function doWork() {
 								\$(td).addClass('neighbors-' + rowData.id2)
 							}
 						},
-						{ data: 'metrics.Route Changes', title: 'Route<br/>Changes', defaultContent: "n/a", 
+						{ data: 'metrics.Route Changes', title: 'Route<br/>Changes', defaultContent: "n/a",
 							searchPanes: {show: false},
 							createdCell: function (td, cellData, rowData, row, col) {
 								if (cellData > 1 && cellData <= 4) {
@@ -1466,12 +1905,44 @@ function doWork() {
 						{ data: 'deviceSecurity', title: 'Security', defaultContent: "Unknown", searchPanes: { controls: false},
 							visible: ${settings?.addCols?.contains("security")}
 						},
-						{ data: 'routeHtml', title: 'Route<br/>(from&nbsp;Hub)' }
-						// ,{data: 'metrics', title: 'Raw Stats', searchPanes: {show: false},
-						// 	"render": function ( data, type, row ) {
-						// 		return JSON.stringify(data);
-						// 	}
-						// }
+						{ data: 'routeHtml', title: 'Route<br/>(from&nbsp;Hub)', searchPanes: { show: false }},
+						{ data: 'devDetail.lastActiveTS', title: "Last Activity", defaultContent: "NO DATA", 
+							visible: ${settings?.addCols?.contains("lastActive")},
+							searchPanes: { show: false },
+							render: function(data, type, row) {
+								if (type === 'sort' || type === 'type') {
+									return data
+								} else if (type === 'display') {
+									if (row.devDetail && row.devDetail.lastActive) {
+										return row.devDetail.lastActive
+									} else {
+										return null
+									}
+								} else {
+									return data
+								}
+							}
+						},
+						{ data: 'devDetail.listening', title: "Listening", defaultContent: "NO DATA",
+							visible: ${settings?.addCols?.contains("listening")},
+							searchPanes: {
+								name: "listening",
+								show: hasDeviceAccess() ? undefined : false,
+								controls: false
+							}
+						},
+						{ data: 'devDetail.beaming', title: "Beaming", defaultContent: "NO DATA",
+							visible: ${settings?.addCols?.contains("beaming")},
+							searchPanes: { show: hasDeviceAccess() ? undefined : false, controls: false}
+						},
+						{ data: 'devDetail.flirs', title: "FLiRS", defaultContent: "NO DATA",
+							visible: ${settings?.addCols?.contains("flirs")},
+							searchPanes: { show: hasDeviceAccess() ? undefined : false, controls: false}
+						},
+						{ data: 'devDetail.zwavePlus', title: "Z-Wave Plus", defaultContent: "NO DATA",
+							visible: ${settings?.addCols?.contains("zwaveplus")},
+							searchPanes: { show: hasDeviceAccess() ? undefined : false, controls: false}
+						},
 					],
 					"pageLength": -1,
 					"rowId": 'id',
@@ -1481,10 +1952,11 @@ function doWork() {
 					"searchPanes": {
 						layout: 'meshdetails-6',
 						cascadePanes: true,
-						order: ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev', 'Device Type', 'Manufacturer']
+						order: searchPanesList()
 					}
 				});
 				updateLoading('','');
+				hubLog('info', 'Datatables Loaded')
 			}).then(e => {
 
 				\$('#mainTable tbody').on('click', 'td.details-control', async function () {
@@ -1505,7 +1977,6 @@ function doWork() {
 				} );
 				// Fix width issue
 				\$('input.dtsp-search').width('auto')
-
 			})
 
 			
@@ -1569,7 +2040,7 @@ def getAccessToken() {
 	}
 }
 
-def gitBranch()         { return "beta" }
+def gitBranch() { return "beta" }
 
 def getAppEndpointUrl(subPath)	{ return "${getFullLocalApiServerUrl()}${subPath ? "/${subPath}?access_token=${getAccessToken()}" : ""}" }
 
@@ -1582,11 +2053,5 @@ String getAppLink(String path) {
 String removeHostFromURL(String originalURL)
 {
 	URI uri = new URI(originalURL);
-    return uri.getPath() + (uri.getQuery() ? '?' + uri.getQuery() : '');
-}
-
-
-String getLinkHost(String url) {
-	URI uri = new URI(url);
-	return uri.getHost()
+	return uri.getPath() + (uri.getQuery() ? '?' + uri.getQuery() : '');
 }
