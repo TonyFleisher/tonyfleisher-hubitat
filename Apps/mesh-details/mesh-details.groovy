@@ -515,6 +515,7 @@ function transformZwaveRow(row) {
 
 	var label = ""
 	var deviceLink = ""
+	var hubDeviceId = null
 	if (childrenData[4].innerText.trim() != '') {
 		label = childrenData[4].innerText.trim()
 		deviceLink = childrenData[4].firstElementChild.getAttribute('href')
@@ -1289,8 +1290,10 @@ function doWork() {
 					// console.log(`Restoring child for row`)
 					// console.log(row)
 					// console.log(e)
-					var content = await displayRowDetail(row)
-					row.child(content).show();
+					if (row.data().hubDeviceId != '') {
+						var content = await displayRowDetail(row)
+						row.child(content).show();
+					}
 				} );
 
 				updateLoading('Loading..','Creating table');
@@ -1493,9 +1496,11 @@ function doWork() {
 							tr.removeClass('shown');
 						}
 						else {
-							var content = await displayRowDetail(row)
-							row.child(content).show();
-							tr.addClass('shown');
+							if (row.data().hubDeviceId != '') {
+								var content = await displayRowDetail(row)
+								row.child(content).show();
+								tr.addClass('shown');
+							}
 						}
 				} );
 				// Fix width issue
