@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.5.22.1-beta" }
-private appVerDate() { return "2022-01-03" }
+private releaseVer() { return "0.5.22.2-beta" }
+private appVerDate() { return "2022-01-06" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -527,7 +527,10 @@ async function getZWaveDeviceIds() {
 	}
 	console.log("Collecting zwave device ids")
 	var deviceIds = devList.reduce( (acc, val) => {
-		acc.push(val.hubDeviceId); return acc;
+		if (val.hubDeviceId) {
+			acc.push(val.hubDeviceId); 
+		}
+		return acc;
 	}, [])
 	console.log("DeviceIds: " + deviceIds.toString())
 	return deviceIds
@@ -1199,11 +1202,13 @@ async function getData() {
 	if (hasDeviceAccess()) {
 		deviceDetails = await getDeviceDetails()
 		var missingNonRepeaters = devList.reduce( (acc, val) => {
-			var hubId = val.hubDeviceId.toString()
-			var zwId = val.id2.toString()
-			var detail = deviceDetails[val.hubDeviceId.toString()]
-			if (detail && detail.listening === false && !nonRepeaters.has(zwId)) {
-				acc.push(zwId)
+			if (val.hubDeviceId && val.id2) {
+				var hubId = val.hubDeviceId.toString()
+				var zwId = val.id2.toString()
+				var detail = deviceDetails[val.hubDeviceId.toString()]
+				if (detail && detail.listening === false && !nonRepeaters.has(zwId)) {
+					acc.push(zwId)
+				}
 			}
 			return acc
 		}, [])
@@ -1360,7 +1365,7 @@ async function displayRowDetail(row) {
 	var data = row.data()
 
 	// On demand data
-	if (!data.commandClasses) {
+	if (!data.commandClasses && data.hubDeviceId) {
 		var detailData = await getDeviceInfo(data.hubDeviceId)
 		var inClusters = detailData.inClusters && detailData.inClusters.length > 1 ? detailData.inClusters.split(',') : []
 		var secureInClusters = detailData.secureInClusters && detailData.secureInClusters.length > 1 ? detailData.secureInClusters.split(',') : []
