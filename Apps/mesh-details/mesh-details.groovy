@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.5.22.2-beta" }
-private appVerDate() { return "2022-01-06" }
+private releaseVer() { return "0.6.22.2-beta" }
+private appVerDate() { return "2022-10-06" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -105,7 +105,7 @@ def mainPage() {
 		}
 
 		if (embedStyle && settings?.linkStyle && settings?.linkStyle != 'embedded') {
-			log.debug "Removing unused embedStyle"
+			if (enableDebug) log.debug "Removing unused embedStyle"
 			app.removeSetting('embedStyle')
 		}
 
@@ -129,7 +129,7 @@ def mainPage() {
 		} else {
 			if (app.getInstallationState() == 'COMPLETE') {
 				section("Display Mode") {
-					paragraph "Choose if the Mesh Details webapp will open in a new window or stay in this window"
+					paragraph "Choose if the Mesh Details will open in a new window or stay in this window"
 					input "linkStyle", "enum", title: "Link Style", required: true, submitOnChange: true, options: ["embedded":"Same Window", "external":"New Window"], image: ""
 					if (settings?.linkStyle == 'embedded') {
 						input "embedStyle", "enum", title: "Embed Style", required: true, submitOnChange: true, options: ["inline": "Display in App screen (experimental; alpha feature)", "fullscreen": "Display fullscreen (<b>default</b>)"], defaultValue: "fullscreen"
@@ -173,7 +173,8 @@ def mainPage() {
 											await doWork()
 										})
 									})
-									</script>"""
+									</script>
+								"""
 								href "", title: "Show Mesh Details", url: meshInfoLink, style: "embedded", required: false, description: "Tap Here to view the Mesh Details", image: ""
 							}
 						}
@@ -227,7 +228,7 @@ private def getAddColsInput() {
 def remoteLog() {
 	def data = request.JSON
 	if (data.level == "debug") {
-		log.debug(data.log)
+		if (enableDebug) log.debug(data.log)
 	}
 	else if (data.level == "info") {
 		log.info(data.log)
@@ -555,7 +556,7 @@ async function getZwaveList() {
 		await loadAxios()
 	}
 
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000,
 		responseType: "text" // iOS seems to fail (reason unknown) with document here
 		});
@@ -659,7 +660,7 @@ function updateDevicesInApp(devices) {
 	var appLink = "${getAppLink()}"
 	var appId = "${getAppId()}"
 
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000,
 		config: {headers: {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}}
 	});
@@ -966,7 +967,7 @@ function translateDeviceType(deviceType) {
 
 function hubLog(level,log) {
   if (window.axios) {
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000
 	});
 
@@ -1127,7 +1128,7 @@ function loadScripts() {
 
 // Get data from zwaveNodeDetail endpoint (built-in)
 function getZwaveNodeDetail() {
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000
 	});
 
@@ -1147,7 +1148,7 @@ function getZwaveNodeDetail() {
 
 // Get details from devices app endpoint and merge into devList
 function getDeviceDetails() {
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000
 	});
 
@@ -1263,7 +1264,7 @@ function getDeviceInfo(devId) {
 		// console.log("Returning details for " + devId + " from cache")
 		return Promise.resolve(deviceDetailsMap.get(devId))
 	}
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000,
 		responseType: "text" // iOS seems to fail (reason unknown) with document here
 		});
@@ -1678,7 +1679,7 @@ function hideNonRepeaters() {
 
 // For embeded mode, load the app into the app screen
 function loadApp(appURI) {
-	const instance = axios.create({
+	const instance = axios.default.create({
 		timeout: 5000,
 		responseType: "document"
 		});
@@ -1993,7 +1994,7 @@ function doWork() {
 					}
 				});
 				updateLoading('','');
-				hubLog('info', 'Datatables Loaded')
+				hubLog('debug', 'Datatables Loaded')
 			}).then(e => {
 
 				\$('#mainTable tbody').on('click', 'td.details-control', async function () {
@@ -2042,13 +2043,13 @@ function sendDebugData() {
 }
 
 def installed() {
-	log.debug "Installed with settings: ${settings}"
+	if (enableDebug) log.debug "Installed with settings: ${settings}"
 	atomicState?.isInstalled = true
 	initialize()
 }
 
 def updated() {
-	log.trace ("${app?.getLabel()} | Now Running Updated() Method")
+	if (enableDebug) log.trace ("${app?.getLabel()} | Now Running Updated() Method")
 	if(!atomicState?.isInstalled) { atomicState?.isInstalled = true }
 	initialize()
 }
