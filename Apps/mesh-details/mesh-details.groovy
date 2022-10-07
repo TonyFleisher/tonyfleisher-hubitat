@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.6.22.2-beta" }
-private appVerDate() { return "2022-10-06" }
+private releaseVer() { return "0.6.23.1-beta" }
+private appVerDate() { return "2022-10-07" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -516,7 +516,7 @@ def zwaveUtilsController() {
 	def javaScript = """
 
 function loadAxios() {
-	return \$.getScript('https://unpkg.com/axios/dist/axios.min.js', function() {
+	return \$.getScript('https://unpkg.com/axios@1.1.2/dist/axios.min.js', function() {
 		console.log("axios loaded")
 	});
 }
@@ -556,7 +556,7 @@ async function getZwaveList() {
 		await loadAxios()
 	}
 
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000,
 		responseType: "text" // iOS seems to fail (reason unknown) with document here
 		});
@@ -660,7 +660,7 @@ function updateDevicesInApp(devices) {
 	var appLink = "${getAppLink()}"
 	var appId = "${getAppId()}"
 
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000,
 		config: {headers: {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}}
 	});
@@ -967,7 +967,7 @@ function translateDeviceType(deviceType) {
 
 function hubLog(level,log) {
   if (window.axios) {
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000
 	});
 
@@ -1128,7 +1128,7 @@ function loadScripts() {
 
 // Get data from zwaveNodeDetail endpoint (built-in)
 function getZwaveNodeDetail() {
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000
 	});
 
@@ -1148,7 +1148,7 @@ function getZwaveNodeDetail() {
 
 // Get details from devices app endpoint and merge into devList
 function getDeviceDetails() {
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000
 	});
 
@@ -1264,7 +1264,7 @@ function getDeviceInfo(devId) {
 		// console.log("Returning details for " + devId + " from cache")
 		return Promise.resolve(deviceDetailsMap.get(devId))
 	}
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000,
 		responseType: "text" // iOS seems to fail (reason unknown) with document here
 		});
@@ -1679,7 +1679,7 @@ function hideNonRepeaters() {
 
 // For embeded mode, load the app into the app screen
 function loadApp(appURI) {
-	const instance = axios.default.create({
+	const instance = axios.create({
 		timeout: 5000,
 		responseType: "document"
 		});
