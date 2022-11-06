@@ -31,7 +31,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.6.24.1-beta" }
+private releaseVer() { return "0.6.24.2-beta" }
 private appVerDate() { return "2022-11-06" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -292,7 +292,7 @@ def collectDevicesData() {
 			def lastActiveTS = lastActiveStrUTC ? Date.parse("yyy-MM-dd HH:mm:ssZ","$lastActiveStrUTC".replace("+00:00","+0000")).getTime() : null;
 			
 			SimpleDateFormat sdf= new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
-			def lastActiveStrLocal = sdf.format(lastActiveTS)
+			def lastActiveStrLocal = lastActiveStrUTC ? sdf.format(lastActiveTS) : "Never"
 			def zwaveData = dev.getDataValue("zwNodeInfo")
 			if (!zwaveData) {
 				log.warn("${dev.getDisplayName()} has no zwNodeInfo. (Not a z-wave device?)")
@@ -1593,10 +1593,14 @@ async function displayRowDetail(row) {
 		html += '<div hidden="true" class="debug-content"><span>zwave NodeDetail</span><pre>'
 		html += pretty.replace(/JSONS/g, '&nbsp;&nbsp;')
 		html += '</pre></div>'
-		pretty = JSON.stringify(data.devDetail,null,'JSONS')
-		html += '<div hidden="true" class="debug-content"><span>Device Detail</span><pre>'
-		html += pretty.replace(/JSONS/g, '&nbsp;&nbsp;')
-		html += '</pre></div>'
+		if (data.devDetail) {
+			pretty = JSON.stringify(data.devDetail,null,'JSONS')
+			html += '<div hidden="true" class="debug-content"><span>Device Detail</span><pre>'
+			html += pretty.replace(/JSONS/g, '&nbsp;&nbsp;')
+			html += '</pre></div>'
+		} else {
+			html += '<div hidden="true" class="debug-content"><span>Device Detail</span><pre>NO DATA - no auth or not zwave?</pre></div>'
+		}
 	}
 
 	if (data.commandClasses && !data.commandClasses.includes('0x84')) {

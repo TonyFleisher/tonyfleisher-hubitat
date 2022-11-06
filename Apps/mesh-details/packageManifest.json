@@ -21,7 +21,7 @@
       "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
     }
   ],
-  "version": "0.6.24.1-beta",
+  "version": "0.6.24.2-beta",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
   "releaseNotes": "v0.6.24-beta\n * Display last activity times in local timezone\n * Add current time (of page load) to the page header area\n * Add filter panes for LWR RSSI\n * Fix issues with command classes and zwaveplus detection\n * Add some additional debug messaging"
 }
