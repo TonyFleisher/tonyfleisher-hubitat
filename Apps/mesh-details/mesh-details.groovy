@@ -31,8 +31,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.6.23.1-beta" }
-private appVerDate() { return "2022-10-07" }
+private releaseVer() { return "0.6.24.1-beta" }
+private appVerDate() { return "2022-11-06" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -43,48 +43,13 @@ mappings {
 	path("/meshinfo") { action: [GET: "meshInfo"] }
 	path("/script.js") { action: [GET: "scriptController"] }
 	path("/zwaveUtils.js") { action: [GET: "zwaveUtilsController"]}
-	path("/deviceDetails") { action: [GET: "deviceDetails"]}
+	path("/deviceDetails") { action: [GET: "deviceDetailsController", POST: "saveDeviceDetailsController"]}
 	path("/remoteLog") { action: [POST: "remoteLog"]}
 }
+import java.text.SimpleDateFormat
 
-def devicesPage() {
-	dynamicPage (name: "devicesPage", title: "", install: false, uninstall: false) {
-		if (!permitDeviceAccess) {
-			app.removeSetting("deviceList")
-			state.hasInitializedDeviceList = false
-		}
-		if (deviceList && !state?.hasInitializedDeviceList) {
-			state.hasInitializedDeviceList = true
-		}
-
-		section("") {
-			input "permitDeviceAccess", "bool", title: "Grant access to z-wave devices (experimental)", defaultValue: false, submitOnChange: true
-			if (permitDeviceAccess) {
-				if (!deviceList) {
-					input "addAllZwave", "bool", title: "Select ALL Z-Wave devices", defaultValue: false, submitOnChange: true
-					if (addAllZwave) {
-						paragraph title: "initDevicesScript", """
-										<script id="addDevices">
-										async function loadUtilScript() {
-												await \$.getScript('${getAppLink("zwaveUtils.js")}')
-										}
-										async function addAllZwaveDevices() {
-											await loadUtilScript()
-											var deviceIds = await getZWaveDeviceIds()
-											\$('#settings\\\\[deviceList\\\\]').val(deviceIds.join(","))
-											jsonSubmit(null,null,false)
-										}
-										\$(document).ready( async function() { await addAllZwaveDevices()})
-										</script>
-						"""
-						app.removeSetting("addAllZwave")
-					}
-				}
-				input "deviceList", "capability.*", multiple: true, submitOnChange: true
-			}
-		}
-	}
-}
+import groovy.transform.Field
+@Field static String statusMessage = ""
 
 def mainPage() {
 	dynamicPage (name: "mainPage", title: "", install: true, uninstall: true) {
@@ -202,6 +167,44 @@ def mainPage() {
 	}
 }
 
+def devicesPage() {
+	dynamicPage (name: "devicesPage", title: "Authorize Access to Devices", install: false, uninstall: false) {
+		if (!permitDeviceAccess) {
+			app.removeSetting("deviceList")
+			state.hasInitializedDeviceList = false
+		}
+		if (deviceList && !state?.hasInitializedDeviceList) {
+			state.hasInitializedDeviceList = true
+		}
+
+		section("") {
+			input "permitDeviceAccess", "bool", title: "Grant access to z-wave devices (experimental)", defaultValue: false, submitOnChange: true
+			if (permitDeviceAccess) {
+				if (!deviceList) {
+					input "addAllZwave", "bool", title: "Select ALL Z-Wave devices", defaultValue: false, submitOnChange: true
+					if (addAllZwave) {
+						paragraph title: "initDevicesScript", """
+										<script id="addDevices">
+										async function loadUtilScript() {
+												await \$.getScript('${getAppLink("zwaveUtils.js")}')
+										}
+										async function addAllZwaveDevices() {
+											await loadUtilScript()
+											var deviceIds = await getZWaveDeviceIds()
+											\$('#settings\\\\[deviceList\\\\]').val(deviceIds.join(","))
+											jsonSubmit(null,null,false)
+										}
+										\$(document).ready( async function() { await addAllZwaveDevices()})
+										</script>
+						"""
+						app.removeSetting("addAllZwave")
+					}
+				}
+				input "deviceList", "capability.*", multiple: true, submitOnChange: true
+			}
+		}
+	}
+}
 private def getDeviceListHtml() {
 	def initHtml = """<span style="float:right;"><a href="" onclick="jsonSubmit('_action_href_name|devicesPage|2',null); return false">(edit)</a></span>"""
 	def results = deviceList.inject(initHtml, { r, dev -> 
@@ -264,11 +267,32 @@ def resetHostOverride() {
 
 import org.codehaus.groovy.runtime.EncodingGroovyMethods
 
-def deviceDetails() {
+
+// Map from HE device id to object with relevant data; this is sent as json to app via /deviceDetails endpoint
+// zwaveNodeInfo details:
+/*
+Silicon Labs, SDS13781, Z-Wave Application Command Class Specification.
+
+Capability
+Security
+Reserved
+Basic
+Generic
+Specific
+inCCList 
+0xEF
+outCCList
+*/
+def collectDevicesData() {
+
 	def results = [:]
 	results = deviceList.inject([:], { r, dev -> 
 			def id = dev.id
-			def lastActiveStr = dev.getLastActivity()
+			def lastActiveStrUTC = dev.getLastActivity()
+			def lastActiveTS = lastActiveStrUTC ? Date.parse("yyy-MM-dd HH:mm:ssZ","$lastActiveStrUTC".replace("+00:00","+0000")).getTime() : null;
+			
+			SimpleDateFormat sdf= new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+			def lastActiveStrLocal = sdf.format(lastActiveTS)
 			def zwaveData = dev.getDataValue("zwNodeInfo")
 			if (!zwaveData) {
 				log.warn("${dev.getDisplayName()} has no zwNodeInfo. (Not a z-wave device?)")
@@ -276,6 +300,7 @@ def deviceDetails() {
 			}
 			def inCC = dev.getDataValue("inClusters")
 			def inCCSec = dev.getDataValue("secureInClusters")
+
 			def zwaveBytes = zwaveData.split(" ")
 			def zwaveDataLen = zwaveBytes.length
 
@@ -306,10 +331,20 @@ def deviceDetails() {
 				speedBits = nifBytes[0].substring(2,5)
 				maxSpeed = Integer.parseInt(speedBits,2)
 				extraSpeed = (Integer.parseInt(zwaveBytes[2], 16) & 0x01) ? "yes" : "no"
+				def ccData = parseCCFromZwaveinfo(zwaveData);
 
-				inCCList = inCC ? inCC.split(',') : []
-				inCCSecList = inCCSec ? inCCSec.split(',') : []
+				inCCList = ccData.ccList;
+				inCCSecList = ccData.ccSecList;
+
+				if (inCC) {
+					inCC.split(',').each { if (!inCCList.contains(it)) {inCCList.add(it)}};
+				}
+				if (inCCSec) {
+					inCCSec.split(',').each { if (!inCCSecList.contains(it)) {inCCSecList.add(it)}};
+				}
+
 				zwavePlus = (inCCList.contains('0x5E')) ? "yes" : "no"
+
 			}
 			r.put(id, [
 				name: dev.getDisplayName(),
@@ -326,22 +361,80 @@ def deviceDetails() {
 				//nifBytes: nifBytes,
 				speedBits: speedBits,
 				status: dev.getStatus(),
-				lastActive: lastActiveStr,
+				lastActive: lastActiveStrUTC,
 				zwaveData: zwaveData,
 				//zwaveBytes: zwaveBytes,
 				zwaveDataLen: zwaveDataLen,
 				inCC: inCCList,
 				inCCSec: inCCSecList,
 				zwavePlus: zwavePlus,
-				lastActiveTS: lastActiveStr ? Date.parse("yyy-MM-dd HH:mm:ssZ","$lastActiveStr".replace("+00:00","+0000")).getTime() : null
+				lastActiveTS: lastActiveTS,
+				lastActiveStrLocal: lastActiveStrLocal
 			])
+			// TODO: Save list of listening devices to state
+			// TODO: Save list of flirs devices to state
 			r
 		}
 	)
+	return results
+}
+
+def parseCCFromZwaveinfo(zwaveInfo) {
+	def result = [:]
+	def ccList = []
+	def ccSecList = []
+	def filteredClasses = ['23', '34', '4F', '58', '5C', '5F', '68', '9A', 'F1', '00']
+	def zwaveBytes = zwaveInfo.split(" ")
+	if (zwaveBytes.size() < 7) {
+		result.ccList = ccList
+		result.ccSecList = ccSecList
+		return result;
+	}
+	zwaveBytes = zwaveBytes[6..-1]
+
+	// Only care about supported command classes, so ignore the contrlled class list
+	int end = zwaveBytes.findIndexOf {it == 'EF'}
+	if (end != -1) {
+		zwaveBytes = zwaveBytes[0..end-1]
+	}
+
+	// Technically, we should look for consecutive bytes: F1 00
+	int secMark = zwaveBytes.findIndexOf {it == '00'}
+	if (secMark != -1) {
+		ccList = zwaveBytes[0..secMark-1]
+		ccSecList = zwaveBytes[secMark+1 .. -1]
+	} else {
+		ccList = zwaveBytes
+	}
+
+	ccList.removeAll(filteredClasses)
+	ccSecList.removeAll(filteredClasses)
+	result.ccList = ccList.collect { '0x' + it}
+	result.ccSecList = ccSecList.collect { '0x' + it}
+	//   println "input: ${zwaveInfo}"
+	//   println "ccList: ${ccList}"
+	//   println "secCCList: ${secCCList}"
+	return result
+}
+
+// JSON Endpoint: GET /deviceDetails
+def deviceDetailsController() {
+	def results = collectDevicesData()
 	results.now=(new Date()).getTime()
 	renderJson(results)
-
 }
+
+// JSON Endpoint: POST /deviceDetails
+def saveDeviceDetailsController() {
+	def data = request.JSON
+	if (data.repeaterlist) {
+		state.repeaterList = data.repeaterList
+	}
+	if (data.sleepyDevicesList) {
+		state.sleepyDevicesList = data.sleepyDevicesList
+	}
+}
+
 
 import groovy.json.JsonOutput
 def renderJson(obj)
@@ -469,7 +562,10 @@ dialog:not([open]) {
 </head>
 <body>
 <h1 style="text-align:center; flex-basis:100%;">Hubitat Z-Wave Mesh Details <div role="doc-subtitle" style="font-size: small;">(v${releaseVer() + ' - ' + appVerDate()})</div> </h1>
-<div id="messages" style="text-align:center; flex-basis:100%;"><div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
+
+<div id="messages" style="text-align:center; flex-basis:100%;">
+<div id="message1" style="text-align:center; flex-basis:100%;"></div>
+<div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
 <div id="view-topology-div">
 	<button type="button" id="view-topology" data-toggle="modal" type="button" onclick="getTopologyModal()">
 		View Z-Wave Topology
@@ -514,6 +610,7 @@ dialog:not([open]) {
 
 def zwaveUtilsController() {
 	def javaScript = """
+logToConsole = false
 
 function loadAxios() {
 	return \$.getScript('https://unpkg.com/axios@1.1.2/dist/axios.min.js', function() {
@@ -970,7 +1067,7 @@ function hubLog(level,log) {
 	const instance = axios.create({
 		timeout: 5000
 	});
-
+	if (logToConsole) { console.log(level + ":" + log)}
 	return instance
 	.post("${getAppLink("remoteLog")}", { level: level, log: log})
   }
@@ -984,6 +1081,10 @@ function updateLoading(msg1, msg2) {
 			hubLog("debug", `\${msg1} - \${msg2}`)
 		}
 	}
+}
+
+function updateHeaderMessage(msg) {
+	\$('#message1').text(msg)
 }
 
 
@@ -1489,7 +1590,11 @@ async function displayRowDetail(row) {
 	if ($enableDebug) {
 		html += '<button class="debug-control" onclick="showDetailDebug(this)" class="btn btn-danger btn-nodeDetail">Show Debug</button>'
 		var pretty = JSON.stringify(data.detail,null,'JSONS')
-		html += '<div hidden="true" class="debug-content"><pre>'
+		html += '<div hidden="true" class="debug-content"><span>zwave NodeDetail</span><pre>'
+		html += pretty.replace(/JSONS/g, '&nbsp;&nbsp;')
+		html += '</pre></div>'
+		pretty = JSON.stringify(data.devDetail,null,'JSONS')
+		html += '<div hidden="true" class="debug-content"><span>Device Detail</span><pre>'
 		html += pretty.replace(/JSONS/g, '&nbsp;&nbsp;')
 		html += '</pre></div>'
 	}
@@ -1506,7 +1611,7 @@ async function displayRowDetail(row) {
 }
 
 function showDetailDebug(btn) {
-	btn.parentElement.getElementsByClassName('debug-content')[0].hidden=false
+	\$(btn.parentElement).find('.debug-content').show()
 }
 
 function zwaveNodeRepair(zwaveNodeId) {
@@ -1725,7 +1830,7 @@ if ( "${settings?.embedStyle}" != 'inline') {
 }
 
 function searchPanesList() {
-	var panes = ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev', 'Device Type', 'Manufacturer']
+	var panes = ['Repeater', 'Status', 'Security', 'Connection Speed', 'RTT Avg', 'RTT StdDev', 'LWR RSSI', 'Device Type', 'Manufacturer']
 	if (hasDeviceAccess) {
 		panes.push('listening')
 		panes.push('Beaming')
@@ -1893,14 +1998,23 @@ function doWork() {
 							
 						},
 
-						{ data: 'metrics.LWR RSSI', title: 'LWR RSSI', defaultContent: "unknown", searchPanes: {show: false},
+						{ data: 'metrics.LWR RSSI', title: 'LWR RSSI', defaultContent: "unknown", searchPanes: {orthogonal: 'sp', controls: false},
 							visible: ${settings?.addCols?.contains("lwrRssi")},
+
 							render: function(data, type, row) {
 								var val = (data === '' ? '' : data.match(/([-0-9]*)dB/)[1])
-								if (type === 'sort' || type === 'type') {
+								if (type === 'filter' || type === 'sp') {
+								return val == (undefined || '') ? 'unknown' 
+										: val < -20 ? '-20dB - -11dB' 
+										: val <= 0 ? '-10dB - -1dB' 
+										: val <= 10 ? '0dB - 10dB'
+										: '> 10dB'
+								} else if (type === 'sort' || type === 'type') {
 									return val
 								} else {
-									return val ? val + " dB" : 'unknown'
+									return val ?
+										`\${val} dB`
+										: 'unknown'
 								}
 							},
 							createdCell: function (td, cellData, rowData, row, col) {
@@ -1951,8 +2065,8 @@ function doWork() {
 								if (type === 'sort' || type === 'type') {
 									return data
 								} else if (type === 'display') {
-									if (row.devDetail && row.devDetail.lastActive) {
-										return row.devDetail.lastActive
+									if (row.devDetail && row.devDetail.lastActiveStrLocal) {
+										return row.devDetail.lastActiveStrLocal
 									} else {
 										return null
 									}
@@ -1994,7 +2108,8 @@ function doWork() {
 					}
 				});
 				updateLoading('','');
-				hubLog('debug', 'Datatables Loaded')
+				hubLog('info', 'Datatables Loaded')
+				updateHeaderMessage(new Date().toString())
 			}).then(e => {
 
 				\$('#mainTable tbody').on('click', 'td.details-control', async function () {
