@@ -1,21 +1,12 @@
-/*
- *   Adapted from: ST Mesh Details SmartApp
- *   Copyright 2020 Tony Fleisher. Some Rights Reserved.
+/**
+ *   Copyright 2023 Tony Fleisher
+ * 
+ * Unless required by applicable law or agreed to in writing, 
+ * this software is distributed on an "AS IS" BASIS, WITHOUT 
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *
 */
 
-/*
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
- http://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
-*/
 definition(
 	name: "Hubitat Z-Wave Mesh Details",
 	namespace: "tfleisher",
@@ -31,8 +22,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.6.24.2-beta" }
-private appVerDate() { return "2022-11-06" }
+private releaseVer() { return "0.7.26.1-beta" }
+private appVerDate() { return "2023-10-30" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -653,33 +644,118 @@ async function getZwaveList() {
 		await loadAxios()
 	}
 
+	// Before 2.3.7, we have to parse html for data
+	// DEPRECATED - Will be removed when 2.3.8 is released; heMinVersion will become 2.3.7
+	// XXX: This dictionary comparison will break if version is 2.3.10.X
+	if ("${location.hub.firmwareVersionString}" <= "2.3.7") { 
+		const instance = axios.create({
+			timeout: 5000,
+			responseType: "text" // iOS seems to fail (reason unknown) with document here
+			});
+	
+		return instance
+		.get('/hub/zwaveInfo')
+		.then(response => {
+			var doc = new jQuery(response.data)
+			var deviceRows = doc.find('.device-row')
+			var results = []
+			deviceRows.each (
+				(index,row) => {
+					results.push(transformZwaveRow(row))
+				}
+			)
+			return results
+		})
+		.catch(error => { 
+			console.error(error);
+			updateLoading("Error", error);
+			hubLog("error", `zwaveInfo: Error getting zwave Info: \${error}`)
+		} );
+	}
+
 	const instance = axios.create({
-		timeout: 5000,
-		responseType: "text" // iOS seems to fail (reason unknown) with document here
+		timeout: 5000
 		});
 
-
 	return instance
-	.get('/hub/zwaveInfo')
-	.then(response => {
-		//if ($enableDebug) console.log (`Response: \${JSON.stringify(response)}`)
-		var doc = new jQuery(response.data)
-		var deviceRows = doc.find('.device-row')
-		var results = []
-		deviceRows.each (
-			(index,row) => {
-				results.push(transformZwaveRow(row))
-			}
-		)
-		return results
-	})
-	.catch(error => { 
-		console.error(error);
-		updateLoading("Error", error);
-		hubLog("error", `zwaveInfo: Error getting zwave Info: \${error}`)
-	} );
+		.get('/hub/zwaveDetails/json')
+		.then(response => {
+			return collectZwaveList(response.data)
+		})
+		.catch(error => { 
+			console.error(error);
+			updateLoading("Error", error);
+			hubLog("error", `zwaveInfo: Error getting zwave Info: \${error}`)
+		} );
 }
 
+function collectZwaveList(zwaveDetailsJson) {
+	var zwaveList = [];
+
+	var zwNodes = zwaveDetailsJson.nodes;
+	var zwDevices = zwaveDetailsJson.zwDevices;
+
+	return zwNodes.map ( node => {
+		var zwDevice = zwDevices[node.nodeId];
+
+		// "01 -> 08 -> 0C -> 1B 100kbps"
+		var routesText = node.route;
+		var routers = routesText ? routesText.split(' -> ') : []
+		var routersForDisplay = []
+		var routersList = []
+		
+		var connectionSpeed = "Unknown"
+		if (routers.length > 0) {
+			var lastParts = routers.splice(-1,1) // Remove Last element (this device w/ speed)
+			routers.splice(0,1) // Remove first element (always 01; hub)
+			connectionSpeed = lastParts[0].split(' ')[1]
+			routersList = routers
+			routersForDisplay = routers.map(r => useHex() ? "0x" + r : parseInt("0x"+r))
+		}
+	
+		if (routers.length == 0 && connectionSpeed != '') {
+			routersForDisplay = ['DIRECT']
+		}
+
+		var rtt = node.averageRtt + "ms";
+		var lwr = node.lwrRssi ? (node.lwrRssi + "dB") : "";
+		var statMap = {
+			"PER": node.per,
+			"RTT Avg": rtt,
+			"LWR RSSI": lwr,
+			"Neighbors": node.neighbors,
+			"Route Changes": node.routeChanges
+		};
+
+		var dni = zwDevice.deviceNetworkId;
+		var label = zwDevice.displayName;
+		var hubDeviceId = zwDevice.id;
+		var deviceLink = "/device/edit/" + hubDeviceId;
+
+		var deviceData = {
+			id: dni, // hexId
+			id2: node.nodeId, // intId
+			devIdDec: node.nodeId,
+			metrics: statMap,
+			routers: routersForDisplay, // 	['0x06']
+			routersList: routersList, // list of routers (hex), not including hub; ['06']
+			label: label, // device displayName
+			type: translateDeviceType(node.zwaveType), // "Power Switch Binary"
+			manufacturer: node.zwaveManufacturer,
+			deviceLink: deviceLink, // "/device/edit/2193"
+			hubDeviceId: hubDeviceId, // "2193"
+			deviceSecurity: node.security, // "None"
+			routeHtml: routersForDisplay.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` ->\${v}`, "") + (routersForDisplay[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + dni : node.nodeId}`) ,
+			deviceStatus: node.nodeState,
+			connection: connectionSpeed,
+			commandClasses: node.commandClass,
+			zwNode: node,
+			zwDevice: zwDevice
+		}
+		return deviceData;
+	});
+
+}
 
 function transformZwaveRow(row) {
 	var childrenData = row.children
@@ -1452,7 +1528,7 @@ function buildNeighborsLists(fullnameMap, nodeData) {
 			})
 
 			if (!hasNonHubNeighbor) {
-				hubLog("debug", "No neighbors: Adding to nonRepeaters: " + devId)
+				// hubLog("debug", "No neighbors: Adding to nonRepeaters: " + devId)
 				nonRepeaters.add(devId)
 			}
 		}
@@ -1522,7 +1598,7 @@ async function displayRowDetail(row) {
 			var color
 			if (!symetry) { color = "orange"}
 			html += `<li \${color ? `style="color:\${color}"` : ""}>`
-			if (neighborId < 6) {
+			if (neighborId == 1) {
 				html += useHex() ? '0x0' : '' // 0-pad for hex value
 				html += `\${neighborId} - HUB`
 			} else {
@@ -1552,7 +1628,7 @@ async function displayRowDetail(row) {
 			var color
 			if (!symetry) { color = "orange"}
 			html += `<li \${color ? `style="color:\${color}"` : ""}>`
-			if (neighborId < 6) {
+			if (neighborId == 1) {
 				html += useHex() ? '0x' : ''
 				html += `\${neighborId} - HUB`
 			} else {

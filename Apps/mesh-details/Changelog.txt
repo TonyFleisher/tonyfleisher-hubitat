@@ -1,3 +1,14 @@
+v0.7.26-beta
+* Support updated zwave details ui
+* Fix bug with some zwave devices wrongly being labeled as HUB
+* Bug fixes
+
+v0.6.24-beta
+* Display last activity times in local timezone
+* Add current time (of page load) to the page header area
+* Add filter panes for LWR RSSI\n * Fix issues with command classes and zwaveplus detection
+* Add some additional debug messaging
+
 v0.5.22-beta
 * Add device authorization to access more device data for display/filtering:
   * Listening devices
