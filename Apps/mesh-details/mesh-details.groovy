@@ -22,7 +22,7 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.7.26.1-beta" }
+private releaseVer() { return "0.7.26.2-beta" }
 private appVerDate() { return "2023-10-30" }
 /**********************************************************************************************************************************************/
 preferences {
@@ -748,7 +748,7 @@ function collectZwaveList(zwaveDetailsJson) {
 			routeHtml: routersForDisplay.reduce( (acc, v, i) => (v == 'DIRECT') ? v : acc + ` ->\${v}`, "") + (routersForDisplay[0] == 'DIRECT' ? '' : ` -> \${useHex() ? "0x" + dni : node.nodeId}`) ,
 			deviceStatus: node.nodeState,
 			connection: connectionSpeed,
-			commandClasses: node.commandClass,
+			// commandClasses: node.commandClass,
 			zwNode: node,
 			zwDevice: zwDevice
 		}
