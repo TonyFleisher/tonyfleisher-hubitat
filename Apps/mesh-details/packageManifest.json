@@ -21,7 +21,7 @@
       "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
     }
   ],
-  "version": "v0.7.26.2-beta",
+  "version": "v0.7.26.5-beta",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
   "releaseNotes": "v0.7.26-beta\n  * Support updated zwave details ui\n  * Fix bug with some zwave devices wrongly being labeled as HUB\n  * Bug fixes"
 }

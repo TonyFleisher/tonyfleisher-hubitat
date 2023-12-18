@@ -1,0 +1,19 @@
+{
+  "author": "Tony (alpha releases)",
+  "gitHubUrl": "https://github.com/TonyFleisher/tonyfleisher-hubitat",
+  "payPalUrl": "https://paypal.me/tonyfleisher",
+  "packages": [
+    {
+      "name": "Hubitat Stats Details",
+      "category": "Utility",
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/alpha/Apps/stats-details/packageManifest.json",
+      "description": "A Tool to provide a way to explore Hubitat Stats",
+      "tags": [
+        "Monitoring",
+        "ZWave",
+        "Tools & Utilities"
+      ],
+      "id": "343064e4-3d5e-4e25-8ba4-e86322232f0c"
+    }
+  ]
+}
