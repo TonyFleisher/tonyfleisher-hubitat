@@ -1551,7 +1551,12 @@ var nonRepeaters = new Set()
 function buildNeighborsLists(fullnameMap, nodeData) {
 	neighborsMap = new Map()
 	neighborsMapReverse = new Map()
+ 	deviceMap = new Map()
 	nonRepeaters = new Set()
+ 	Object.entries(nodeData).forEach(  e1 => {
+		var devId = e1[0]
+        	deviceMap[devId]=1
+	})
 	Object.entries(nodeData).forEach(  e1 => {
 		var devId = e1[0]
 		var detail = e1[1]
@@ -1564,8 +1569,9 @@ function buildNeighborsLists(fullnameMap, nodeData) {
 						neighborsMap.set(devId, [])
 					}
 					n = neighborsMap.get(devId)
-					n.push(neighborId)
-
+     					if(deviceMap[neighborId]) {
+						n.push(neighborId)
+					}
 					if (!neighborsMapReverse.has(neighborId)) {
 						neighborsMapReverse.set(neighborId, [])
 					}
