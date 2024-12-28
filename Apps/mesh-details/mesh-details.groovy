@@ -22,8 +22,8 @@ definition(
 
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "0.8.27.5-beta" }
-private appVerDate() { return "2024-05-19" }
+private releaseVer() { return "0.9.1.1" }
+private appVerDate() { return "2024-12-28" }
 /**********************************************************************************************************************************************/
 preferences {
 	page name: "mainPage"
@@ -100,7 +100,7 @@ def mainPage() {
 						} else {
 
 							getAddColsInput()
-							href "devicesPage", title: '<span style="color:green">NEW</span>&nbsp;Authorize Extended Device Data', description: "Authorize access to Z-Wave Device data"
+							href "devicesPage", title: 'Authorize Extended Device Data', description: "Authorize access to Z-Wave Device data"
 
 							if (settings?.linkStyle == 'external' || settings?.embedStyle == 'fullscreen') {
 								href "", title: "Mesh Details", url: meshInfoLink, style: (settings?.linkStyle == "external" ? "external" : "embedded"), required: false, description: "Tap Here to load the Mesh Details Web App", image: ""
@@ -333,16 +333,16 @@ def collectDevicesData() {
 				inCCList = ccData.ccList;
 				inCCSecList = ccData.ccSecList;
 
-				if (inCC) {
-					inCC.split(',').each { if (!inCCList.contains(it)) {inCCList.add(it)}};
-				}
-				if (inCCSec) {
-					inCCSec.split(',').each { if (!inCCSecList.contains(it)) {inCCSecList.add(it)}};
-				}
-
-				zwavePlus = (inCCList.contains('0x5E')) ? "yes" : "no"
-
 			}
+
+			if (inCC) {
+				inCC.split(',').each { if (!inCCList.contains(it)) {inCCList.add(it)}};
+			}
+			if (inCCSec) {
+				inCCSec.split(',').each { if (!inCCSecList.contains(it)) {inCCSecList.add(it)}};
+			}
+			zwavePlus = (inCCList.contains('0x5E')) ? "yes" : "no"
+
 			r.put(id, [
 				name: dev.getDisplayName(),
 				//data: dev.getData(),
@@ -564,6 +564,9 @@ dialog:not([open]) {
 <div id="messages" style="text-align:center; flex-basis:100%;">
 <div id="message1" style="text-align:center; flex-basis:100%;"></div>
 <div id="loading1" style="text-align:center;"></div><div id="loading2" style="text-align:center;"></div></div>
+	<button type="button" id="refreshStats" type="button" onclick="handleRefreshStats()">
+		Refresh Statistics
+	</button>
 <div id="view-topology-div">
 	<button type="button" id="view-topology" data-toggle="modal" type="button" onclick="getTopologyModal()">
 		View Z-Wave Topology
@@ -1924,6 +1927,28 @@ function hideNonRepeaters() {
 			}
 		}
 	})
+}
+
+function refreshStatistics() {
+	return \$.get('/hub/zwaveNodeDetailGet')
+}
+
+function refreshData(dt) {
+    updateLoading('Refreshing..', 'Refreshing device data');
+
+    refreshStatistics().always(() => getData().then(d => { 
+        updateLoading('Refreshing..', 'Rebuilding table');
+        tableContent = d;
+        dt.clear().rows.add(d).searchPanes.clearSelections().searchPanes.rebuildPane().draw()
+        updateLoading('', '');
+        updateHeaderMessage(new Date().toString())
+        hubLog('info', 'Datatables Refresh Statistics completed')
+
+    }))
+}
+
+function handleRefreshStats() {
+	refreshData(tableHandle);
 }
 
 // For embeded mode, load the app into the app screen
