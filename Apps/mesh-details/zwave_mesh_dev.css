@@ -1,0 +1,110 @@
+#header-menu{
+  z-index: 1035;
+}
+
+#pageTitle {
+  background-color: var(--bs-secondary-bg);
+}
+
+#messagesContainer {
+  padding-top: 4.5rem;
+}
+
+#mainTable {
+  border-collapse: collapse;
+}
+
+#mainTable_wrapper > div {
+	--bs-gutter-x: 0;
+}
+
+#menuTitle {
+  padding-top: 1.5rem;
+}
+
+.dtsp-panesContainer .dtsp-searchPane .dataTable tbody > tr:hover > * {
+  --bs-table-color-state: var(--bs-table-hover-color);
+  --bs-table-bg-state: var(--bs-table-hover-bg);
+}
+
+.popover-400 {
+  --bs-popover-max-width: 400px
+}
+
+.sort-handle {
+	cursor: move;
+	cursor: -webkit-grabbing;
+}
+
+ /* Override bug in dtr-control when row has child by adding !important header */
+html.dark table.dataTable tr.dt-hasChild td.dt-control:before,:root[data-bs-theme=dark] table.dataTable tr.dt-hasChild td.dt-control:before,:root[data-theme=dark] table.dataTable tr.dt-hasChild td.dt-control:before {
+  border-top-color: rgba(255, 255, 255, 0.5) !important;
+  border-left-color: transparent !important;
+}
+
+
+td.details-control div{
+	background: url('/ui2/images/sort_desc.png') no-repeat center center;
+	cursor: pointer;
+	transform: rotate(-90deg);
+	position: relative;
+	left: -4px;
+  min-width: 10px
+}
+tr.shown td.details-control div{
+	background: url('/ui2/images/sort_desc.png') no-repeat center center;
+	transform: none;
+	left: auto;
+}
+
+.btn-nodeDetail {
+  display: block
+}
+
+#mainTable_wrapper {
+	overflow: auto
+}
+
+#exportsBtn_wrapper {
+  text-align: right
+}
+
+#zwave-topology-table table {
+  font-size: 12px;
+  font-family: var(--bs-font-monospace);
+  border-collapse: separate;
+}
+
+#zwave-topology-table table td {
+  padding: 1px !important;
+}
+
+.topologyCell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+}
+
+.topologyCell.bg-white {
+  background-color: white !important
+}
+
+.topologyCell.bg-red {
+  background-color: red !important
+}
+
+.topologyCell.bg-blue {
+  background-color: blue !important
+}
+
+#topologyDialog {
+    border: solid;
+}
+
+@font-face {
+    font-display: block;
+    font-family: hubitat;
+    font-style: normal;
+    font-weight: 400;
+    src: url(/ui2/fonts/hubitat.eot?roox2j);
+    src: url(/ui2/fonts/hubitat.eot?roox2j#iefix) format("embedded-opentype"),url(/ui2/fonts/hubitat.woff2?roox2j) format("woff2"),url(/ui2/fonts/hubitat.ttf?roox2j) format("truetype"),url(/ui2/fonts/hubitat.woff?roox2j) format("woff"),url(/ui2/fonts/hubitat.svg?roox2j#hubitat) format("svg")
+}

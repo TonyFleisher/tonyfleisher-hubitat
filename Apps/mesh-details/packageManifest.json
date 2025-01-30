@@ -1,7 +1,7 @@
 {
   "packageName": "Hubitat Z-Wave Mesh Details",
   "author": "Tony Fleisher",
-  "minimumHEVersion": "2.2.4",
+  "minimumHEVersion": "2.3.8",
   "dateReleased": "2021-02-21",
   "apps": [
     {
@@ -21,7 +21,25 @@
       "betaLocation": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
     }
   ],
-  "version": "v0.9.1.1",
+  "files": [
+    {
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/zwave_mesh_dev.css",
+      "name": "zwave_mesh_dev-1.1.34.css"
+    },
+    {
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/zwave_mesh_dev-utils-controller.js",
+      "name": "zwave_mesh_dev-utils-controller-1.1.34.js"
+    },
+    {
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/zwave_mesh_dev-script-controller.js",
+      "name": "zwave_mesh_dev-script-controller-1.1.34.js"
+    },
+    {
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/zwave_mesh_dev-dataTables.js",
+      "name": "zwave_mesh_dev-dataTables-1.1.34.js"
+    }
+  ],
+  "version": "v1.1.34",
   "communityLink": "https://community.hubitat.com/t/beta-a-z-wave-mesh-tool-c7-and-2-2-4-only/57054",
-  "releaseNotes": "v0.9.1.1\n * Bug fixes\n * Add Refresh Statistics Button"
+  "releaseNotes": "v1.1.34\n\n* New UI design (bootstrap theme)\n* Offcanvas menu for Info / Actions\n    * Switch between Light and Dark themes\n    * Refresh Statistics\n    * View Topology\n    * Filter Panes Configuration\n    * (experimental; advanced) Clear Saved Table State\n* Refactor to use HE File Manager for css and javascript\n* BUGFIX: Show empty routes as \"Unknown\" (not \"DIRECT\")\n* Remove column config in App\n* Add Room column and filter\n* Add Command Classes filter\n* Column Visibility Controls (Choose which columns to display in table) \n* Show all filters and columns by default (Column Visibility Controls can remove unwanted columns)\n* Export data to pdf or csv\n* Activate controls on search panes\n* Add option to display decimal with hex id in Node column (suggested by jtp10181)\n* Add option to choose search panes layout\n* Use Fixed headers on table (can be disabled in advanced options)\n* Add Responsive option - hide columns that don't fit on screen (can be enabled in advanced options)\n* Cleanup Deprecated code\n* Toast message (info card) if a z-wave firmware update is available\n* Remove Deprecated code (requires HEVersion to 2.3.8)\n* Remove experimental embeded - inline style"
 }
