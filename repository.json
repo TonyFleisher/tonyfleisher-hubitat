@@ -14,6 +14,18 @@
         "ZWave",
         "Tools & Utilities"
       ]
+    },
+    {
+      "id": "891046ee-56d2-4b07-bd6b-ad3d75612999",
+      "name": "Hubitat Z-Wave Mesh Details (v0.9.1.1 - ARCHIVED)",
+      "category": "Utility",
+      "location": "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/archive/packageManifest.json",
+      "description": "Archived version of Z-Wave Mesh Details (v0.9.1.1)",
+      "tags": [
+        "Monitoring",
+        "ZWave",
+        "Tools & Utilities"
+      ]
     }
   ]
 }

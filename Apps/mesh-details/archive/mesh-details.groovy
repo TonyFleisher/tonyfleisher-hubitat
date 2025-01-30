@@ -8,7 +8,7 @@
 */
 
 definition(
-	name: "Hubitat Z-Wave Mesh Details",
+	name: "Hubitat Z-Wave Mesh Details (v0.9.1.1 - ARCHIVED)",
 	namespace: "tfleisher",
 	author: "TonyFleisher",
 	description: "Get Device Mesh and Router Details",
@@ -17,7 +17,7 @@ definition(
 	iconUrl: "",
 	iconX2Url: "",
 	oauth: true,
-	importUrl: "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/mesh-details.groovy"
+	importUrl: "https://raw.githubusercontent.com/TonyFleisher/tonyfleisher-hubitat/beta/Apps/mesh-details/archive/mesh-details.groovy"
 )
 
 
