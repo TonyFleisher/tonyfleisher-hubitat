@@ -894,7 +894,7 @@ async function doWork() {
                     if ("isRadioUpdateNeeded" in zwaveDetailsJson) {
                         if (zwaveDetailsJson.isRadioUpdateNeeded) {
                             updateStr = "Needs Update";
-                            badgeClass = "test-bg-warning";
+                            badgeClass = "text-bg-warning";
                         } else {
                             updateStr = "Current";
                             badgeClass = "text-bg-success";
