@@ -1,3 +1,8 @@
+v1.1.35
+
+* Initial update to fix fatal errors with zwavejs
+* Fix bug when hiding all search panes
+
 v1.1.34
 
 * New UI design (bootstrap theme)

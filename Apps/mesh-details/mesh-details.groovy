@@ -13,7 +13,7 @@ definition(
 	name: "Hubitat Z-Wave Mesh Details",
 	namespace: "tfleisher",
 	author: "TonyFleisher",
-	description: "Get Z-Wave Mesh Details",
+	description: "Get Device Mesh and Router Details",
 	category: "Utility",
 	singleInstance: true,
 	iconUrl: "",
@@ -24,8 +24,8 @@ definition(
 )
 
 /**********************************************************************************************************************************************/
-private releaseVer() { return "1.1.34.2" }
-private appVerDate() { return "2025-01-30" }
+private releaseVer() { return "1.1.35" }
+private appVerDate() { return "2025-07-09" }
 
 /**********************************************************************************************************************************************/
 preferences {
@@ -49,9 +49,9 @@ import groovy.transform.Field
 @Field static String uiMainTableClasses = "table table-striped table-bordered table-hover stripe cell-border hover"
 @Field static String uiDeviceDetailTableClasses = "table table-bordered"
 @Field static String uiDevicePropertiesTableClasses = "table table-bordered"
-@Field static String v = "998md1134"
+@Field static String v = "998md11343"
 @Field static String statusMessage = ""
-@Field static String fileSuffix = "-1.1.34"
+@Field static String fileSuffix = "-1.1.35"
 
 String getMAIN_SCRIPT_LOCATION() { "/local/zwave_mesh_dev-script-controller" + fileSuffix + ".js" + "?v=${v}" }
 String getUTILS_SCRIPT_LOCATION() {"/local/zwave_mesh_dev-utils-controller" + fileSuffix + ".js" + "?v=${v}" }

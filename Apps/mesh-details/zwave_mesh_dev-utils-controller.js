@@ -188,8 +188,14 @@ async function getZwaveVersion() {
 
 	return instance.get('/hub/zwaveVersion').then(response => {			
 		zStr = response.data;
+		var versionStr;
+		if (isVersionAfter(appData.hub.firmwareVersion,'2.4.1') && zwaveDetailsJson.zwaveJS) {
+			versionStr = zStr;
+		} else {
 		versionInfo = parseVersionReportToJson(zStr);
-		return versionInfo;
+			versionStr = `${versionInfo.firmware0Version}.${versionInfo.firmware0SubVersion}.${versionInfo.hardwareVersion}`;
+		}
+		return versionStr;
 	})
 }
 
@@ -749,4 +755,25 @@ function secs2UptimeStr(uptimeSeconds) {
 	var m = ((uptimeSeconds - s)%3600)/60;
 	var h = Math.floor(uptimeSeconds/3600);
 	return `${h}h ${m}m ${s}s`;
+}
+
+/**
+ *  Compare version strings with semver style versioning
+ * @param {*} versionA
+ * @param {*} versionB
+ * @returns 
+ */
+function semverCompare(versionA, versionB) {
+    if (versionA.startsWith(versionB + "-")) return -1
+    if (versionB.startsWith(versionA + "-")) return  1
+    return versionA.localeCompare(versionB, undefined, { numeric: true, sensitivity: "case", caseFirst: "upper" })
+}
+
+/**
+ * Returns true if semver(a) is greater than semver(b)
+ * @param {*} a 
+ * @param {*} b 
+ */
+function isVersionAfter(a,b) {
+	return semverCompare(a,b) > 0
 }

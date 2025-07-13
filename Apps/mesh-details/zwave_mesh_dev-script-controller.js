@@ -259,13 +259,17 @@ async function getData() {
         var variance = 0
         var stdDev = "0.00"
 
-        var count = detail.transmissionCount
-        if (count > 0) {
-            var totalSquared = Math.pow(detail.sumOfTransmissionTimes, 2)
-            var sumOfTransmissionTimesSquared = detail.sumOfTransmissionTimesSquared
-            var ss = (sumOfTransmissionTimesSquared - (totalSquared / count)).toFixed(0)
-            variance = (ss / count).toFixed(2)
-            stdDev = Math.sqrt(variance).toFixed(2)
+        if (detail && detail.hasOwnProperty('transmissionCount')) {
+            var count = detail.transmissionCount
+            if (count > 0) {
+                var totalSquared = Math.pow(detail.sumOfTransmissionTimes, 2)
+                var sumOfTransmissionTimesSquared = detail.sumOfTransmissionTimesSquared
+                var ss = (sumOfTransmissionTimesSquared - (totalSquared / count)).toFixed(0)
+                variance = (ss / count).toFixed(2)
+                stdDev = Math.sqrt(variance).toFixed(2)
+            }
+        } else {
+            console.log(`No transmission stats for dev id2: ${dev.id2.toString()}`)
         }
         dev.metrics.rtt_variance = variance
         dev.metrics.std_dev = stdDev
@@ -889,8 +893,7 @@ async function doWork() {
                 hubLog('info', 'Datatables Loaded')
                 updateHeaderMessage(new Date().toString())
                 getZwaveVersion().then (v => {
-                    versionStr = `${v.firmware0Version}.${v.firmware0SubVersion}.${v.hardwareVersion}`;
-                    $('#zwaveVersion')[0].innerText = `Z-Wave Firmware: ${versionStr}`;
+                    $('#zwaveVersion')[0].innerText = `Z-Wave Firmware: ${v}`;
                     if ("isRadioUpdateNeeded" in zwaveDetailsJson) {
                         if (zwaveDetailsJson.isRadioUpdateNeeded) {
                             updateStr = "Needs Update";
@@ -1031,7 +1034,7 @@ async function doWork() {
                     } else if (val > 100) {
                         $(td).css('color', 'darkorange')
                     }
-                    if (val > 0) {
+                    if (val > 0 && rowData.detail?.transmissionCount) {
                         $(td).append(`<div style="font-size: small;">count: ${rowData.detail.transmissionCount}</div>`)
                     }
                 }
@@ -1272,7 +1275,7 @@ async function doWork() {
             layout: appSettings.spLayout ? appSettings.spLayout : 'columns-3',
             className: "table-hover",
             cascadePanes: true,
-            order: appSettings.spOrder ? JSON.parse(appSettings.spOrder) : defaultSearchPanesOrder()            
+            order: (appSettings.spOrder || appSettings.spDisabled) ? JSON.parse(appSettings.spOrder) : defaultSearchPanesOrder()            
         }
     });
 
